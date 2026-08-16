@@ -34,11 +34,10 @@ export const config = {
     process.env.PIPER_MODEL ?? "/app/models/en_US-lessac-medium.onnx",
 
   /**
-   * Maximum allowed request body size is 1MB, which is sufficient for at least
-   * ~150 000 words — more than enough for typical use cases.
-   * @default 1_000_000
+   * Maximum allowed request body size is 0.5MB, which is sufficient for at least ~75000 words — more than enough for typical use cases.
+   * @default 500_000
    */
-  maxBodySizeBytes: 1_000_000,
+  maxBodySizeBytes: Number(process.env.MAX_BODY_SIZE_BYTES ?? 500_000),
 
   /** Logging configuration. */
   log: {
