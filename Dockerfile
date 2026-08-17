@@ -1,4 +1,4 @@
-FROM node:24.13-bookworm-slim
+FROM node:24.18.1-bookworm-slim
 
 # Use bash and pipefail for safer builds
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
