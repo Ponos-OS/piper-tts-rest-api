@@ -49,3 +49,12 @@ For each release, the workflow builds from `Dockerfile` and pushes:
 
 - `9109679196/piper-tts-rest-api:<semantic-version>`
 - `9109679196/piper-tts-rest-api:latest`
+
+## Design & Code Philosophy
+
+1. Simpler is better - do not overcomplicate.
+2. Prefer early returns over nested conditionals.
+3. Use vitest.
+   - Use [AAA (Arrange, Act, Assert) style of writing test](https://stackoverflow.com/tags/arrange-act-assert/info).
+4. IMPORTANT: Avoid overly defensive programming; avoid insistence checks; only manage exceptions when necessary.
+5. Use latest version of libraries and idiomatic approaches as of today.

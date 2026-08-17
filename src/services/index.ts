@@ -1,3 +1,4 @@
+export * from "./amqp.js";
 export {
   readPiperModelSampleRate,
   spawnFfmpegMp3FromPcm,

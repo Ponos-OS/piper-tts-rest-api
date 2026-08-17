@@ -8,6 +8,7 @@ import {
 import { withLogging } from "./middlewares/index.js";
 import { handleHealth, handleSpeak } from "./routes/index.js";
 import {
+  connectAmqpBroker,
   verifyFfmpegInstallation,
   verifyPiperInstallation,
 } from "./services/index.js";
@@ -52,19 +53,59 @@ function createServer(): Server {
 /**
  * Bootstraps API dependencies and starts the HTTP server.
  */
-function bootstrap(): void {
+async function bootstrap(): Promise<void> {
   verifyPiperInstallation(config.piperModelPath);
   verifyFfmpegInstallation();
 
+  const broker = await connectAmqpBroker(config.synthesize.rabbitmq);
   const server = createServer();
-  server.listen(config.service.port, () => {
-    logger.info(`TTS API running on port ${config.service.port}`, {
-      context: "Bootstrap",
-    });
-    logger.info(`Piper model: ${config.piperModelPath}`, {
-      context: "Bootstrap",
-    });
+
+  registerShutdown(server, broker);
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(config.service.port, resolve);
+  });
+
+  logger.info(`TTS API running on port ${config.service.port}`, {
+    context: "Bootstrap",
+  });
+  logger.info(`Piper model: ${config.piperModelPath}`, {
+    context: "Bootstrap",
   });
 }
 
-bootstrap();
+function registerShutdown(
+  server: Server,
+  broker: Awaited<ReturnType<typeof connectAmqpBroker>>,
+): void {
+  let shuttingDown = false;
+
+  const shutdown = (): void => {
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+
+    server.close(() => {
+      void broker.close().catch((error: unknown) => {
+        logger.error("Failed to close AMQP broker", {
+          context: "Shutdown",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    });
+  };
+
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
+}
+
+void bootstrap().catch((error: unknown) => {
+  logger.error("Failed to start service", {
+    context: "Bootstrap",
+    error: error instanceof Error ? error.message : String(error),
+  });
+  process.exitCode = 1;
+});

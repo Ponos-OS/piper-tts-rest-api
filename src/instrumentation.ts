@@ -30,6 +30,7 @@ import {
 } from "@opentelemetry/core";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { AmqplibInstrumentation } from "@opentelemetry/instrumentation-amqplib";
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
 import { WinstonInstrumentation } from "@opentelemetry/instrumentation-winston";
 import { resourceFromAttributes } from "@opentelemetry/resources";
@@ -81,6 +82,7 @@ if (!config.otel.enabled) {
       return url === "/health";
     },
   });
+  const amqplibInstrumentation = new AmqplibInstrumentation();
   /**
    * @description auto-instruments the `winston` logger so every log record emitted through it is forwarded to the global `LoggerProvider` (registered below) AND gets `trace_id` / `span_id` / `trace_flags` injected into the record fields based on the currently active OTel context. This is what makes log-trace linking work end-to-end without any manual plumbing inside our `Logger` class.
    */
@@ -135,7 +137,11 @@ if (!config.otel.enabled) {
         new W3CBaggagePropagator(),
       ],
     }),
-    instrumentations: [httpInstrumentation, winstonInstrumentation],
+    instrumentations: [
+      httpInstrumentation,
+      winstonInstrumentation,
+      amqplibInstrumentation,
+    ],
   });
 
   otelSDK.start();
