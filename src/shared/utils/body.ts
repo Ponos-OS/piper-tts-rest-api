@@ -1,5 +1,12 @@
 import type { IncomingMessage } from "node:http";
 
+export class RequestBodyTooLargeError extends Error {
+  constructor() {
+    super("Request body too large");
+    this.name = "RequestBodyTooLargeError";
+  }
+}
+
 /**
  * Reads the raw request body up to a maximum size.
  */
@@ -14,7 +21,7 @@ export function readRawBody(
     req.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size > maxBodySizeBytes) {
-        reject(new Error("Request body too large"));
+        reject(new RequestBodyTooLargeError());
         req.destroy();
         return;
       }

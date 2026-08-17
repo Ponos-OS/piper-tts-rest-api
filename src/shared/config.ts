@@ -39,6 +39,12 @@ export const config = {
    */
   maxBodySizeBytes: Number(process.env.MAX_BODY_SIZE_BYTES ?? 500_000),
 
+  /** Asynchronous synthesis configuration. */
+  synthesize: createSynthesizeConfig(
+    process.env,
+    process.env.NODE_ENV ?? "production",
+  ),
+
   /** Logging configuration. */
   log: {
     /**
@@ -117,3 +123,203 @@ export const config = {
     },
   },
 } as const;
+
+export interface SynthesizeConfig {
+  /** Usually higher than the speak limitation. */
+  maxBodySizeBytes: number;
+  /** Caps how many times this service retries before giving up on TTS generation */
+  maxAttempts: number;
+  /** Retries will backoff as to not retry just immediately */
+  retryDelayMs: number;
+  /** Status report callback calls timeout after */
+  statusCallbackTimeoutMs: number;
+  /** Generate presigned upload URL times out after */
+  genUploadUrlTimeoutMs: number;
+  /** Idle presigned upload URL calls timeout after */
+  uploadIdleTimeoutMs: number;
+  /** Upload calls timeout after */
+  uploadTimeoutMs: number;
+  wordsPerMinute: number;
+  rabbitmq: {
+    url: string;
+    exchange: string;
+    workQueue: string;
+    retryQueue: string;
+    deadLetterExchange: string;
+    deadLetterQueue: string;
+  };
+  callback: {
+    requireHttps: boolean;
+    allowedHosts: readonly string[];
+  };
+}
+
+export function createSynthesizeConfig(
+  env: NodeJS.ProcessEnv,
+  serviceEnv: string,
+): SynthesizeConfig {
+  const rabbitmqUrl = env.RABBITMQ_URL ?? "amqp://localhost:5672";
+  validateRabbitmqUrl(rabbitmqUrl);
+
+  return {
+    maxBodySizeBytes: readPositiveInteger(
+      env.SYNTHESIZE_MAX_BODY_SIZE_BYTES,
+      2_000_000,
+      "SYNTHESIZE_MAX_BODY_SIZE_BYTES",
+    ),
+    maxAttempts: readPositiveInteger(
+      env.SYNTHESIZE_MAX_ATTEMPTS,
+      3,
+      "SYNTHESIZE_MAX_ATTEMPTS",
+    ),
+    retryDelayMs: readPositiveInteger(
+      env.SYNTHESIZE_RETRY_DELAY_MS,
+      30_000,
+      "SYNTHESIZE_RETRY_DELAY_MS",
+    ),
+    statusCallbackTimeoutMs: readPositiveInteger(
+      env.SYNTHESIZE_STATUS_CALLBACK_TIMEOUT_MS,
+      10_000,
+      "SYNTHESIZE_STATUS_CALLBACK_TIMEOUT_MS",
+    ),
+    genUploadUrlTimeoutMs: readPositiveInteger(
+      env.SYNTHESIZE_GEN_UPLOAD_URL_TIMEOUT_MS,
+      10_000,
+      "SYNTHESIZE_GEN_UPLOAD_URL_TIMEOUT_MS",
+    ),
+    uploadIdleTimeoutMs: readPositiveInteger(
+      env.SYNTHESIZE_UPLOAD_IDLE_TIMEOUT_MS,
+      10_000,
+      "SYNTHESIZE_UPLOAD_IDLE_TIMEOUT_MS",
+    ),
+    uploadTimeoutMs: readPositiveInteger(
+      env.SYNTHESIZE_UPLOAD_TIMEOUT_MS,
+      600_000,
+      "SYNTHESIZE_UPLOAD_TIMEOUT_MS",
+    ),
+    wordsPerMinute: readPositiveInteger(
+      env.SYNTHESIZE_WORDS_PER_MINUTE,
+      150,
+      "SYNTHESIZE_WORDS_PER_MINUTE",
+    ),
+    rabbitmq: {
+      url: rabbitmqUrl,
+      exchange: readName(
+        env.SYNTHESIZE_EXCHANGE,
+        "synthesize",
+        "SYNTHESIZE_EXCHANGE",
+      ),
+      workQueue: readName(
+        env.SYNTHESIZE_WORK_QUEUE,
+        "synthesize.work",
+        "SYNTHESIZE_WORK_QUEUE",
+      ),
+      retryQueue: readName(
+        env.SYNTHESIZE_RETRY_QUEUE,
+        "synthesize.retry",
+        "SYNTHESIZE_RETRY_QUEUE",
+      ),
+      deadLetterExchange: readName(
+        env.SYNTHESIZE_DEAD_LETTER_EXCHANGE,
+        "synthesize.dlx",
+        "SYNTHESIZE_DEAD_LETTER_EXCHANGE",
+      ),
+      deadLetterQueue: readName(
+        env.SYNTHESIZE_DEAD_LETTER_QUEUE,
+        "synthesize.dlq",
+        "SYNTHESIZE_DEAD_LETTER_QUEUE",
+      ),
+    },
+    callback: {
+      requireHttps: readBoolean(
+        env.SYNTHESIZE_REQUIRE_HTTPS_CALLBACKS,
+        serviceEnv !== "development" && serviceEnv !== "test",
+        "SYNTHESIZE_REQUIRE_HTTPS_CALLBACKS",
+      ),
+      allowedHosts: readAllowedHosts(env.SYNTHESIZE_CALLBACK_ALLOWED_HOSTS),
+    },
+  };
+}
+
+function readPositiveInteger(
+  rawValue: string | undefined,
+  defaultValue: number,
+  name: string,
+): number {
+  if (rawValue === undefined) {
+    return defaultValue;
+  }
+  if (!/^\d+$/.test(rawValue)) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+
+  const value = Number.parseInt(rawValue, 10);
+
+  if (value < 1) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+
+  return value;
+}
+
+function readBoolean(
+  rawValue: string | undefined,
+  defaultValue: boolean,
+  name: string,
+): boolean {
+  if (rawValue === undefined) {
+    return defaultValue;
+  }
+  if (rawValue === "true") {
+    return true;
+  }
+  if (rawValue === "false") {
+    return false;
+  }
+
+  throw new Error(`${name} must be either true or false`);
+}
+
+function readAllowedHosts(rawValue: string | undefined): readonly string[] {
+  if (rawValue === undefined || rawValue.trim() === "") {
+    return [];
+  }
+
+  const hosts = rawValue.split(",").map((host) => host.trim().toLowerCase());
+
+  if (hosts.some((host) => host === "" || host.includes("/"))) {
+    throw new Error(
+      "SYNTHESIZE_CALLBACK_ALLOWED_HOSTS must be comma-separated hostnames",
+    );
+  }
+
+  return hosts;
+}
+
+function readName(
+  rawValue: string | undefined,
+  defaultValue: string,
+  name: string,
+): string {
+  const value = rawValue ?? defaultValue;
+
+  if (value.trim() === "") {
+    throw new Error(`${name} must not be empty`);
+  }
+
+  return value;
+}
+
+function validateRabbitmqUrl(value: string): void {
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("RABBITMQ_URL must be a valid amqp or amqps URL");
+  }
+
+  if (url.protocol !== "amqp:" && url.protocol !== "amqps:") {
+    throw new Error("RABBITMQ_URL must use amqp or amqps");
+  }
+}
