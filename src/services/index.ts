@@ -7,3 +7,4 @@ export {
   verifyFfmpegInstallation,
   verifyPiperInstallation,
 } from "./piper.js";
+export * from "./synthesis.js";
