@@ -1,12 +1,6 @@
-import type { IncomingMessage } from "node:http";
-
-import { Readable } from "node:stream";
-
 import { createSynthesizeConfig } from "./config.js";
 import {
   parseSynthesizeRequest,
-  readSynthesizeRequest,
-  requestBodyTooLargeError,
   SynthesizeRequestError,
 } from "./synthesize.js";
 
@@ -101,36 +95,5 @@ describe(parseSynthesizeRequest.name, () => {
     expect(() => parseSynthesizeRequest(body, productionConfig)).toThrow(
       "Callback URL must use HTTPS",
     );
-  });
-});
-
-describe(requestBodyTooLargeError.name, () => {
-  it("should return a 413 error", () => {
-    const error = requestBodyTooLargeError();
-
-    expect(error).toBeInstanceOf(SynthesizeRequestError);
-    expect(error.statusCode).toBe(413);
-    expect(error.code).toBe("request-body-too-large");
-  });
-});
-
-describe(readSynthesizeRequest.name, () => {
-  it("should return a 413 error when the request body exceeds the synthesize limit", async () => {
-    const request = Readable.from([
-      JSON.stringify({
-        text: "Hello",
-        genUploadUrl: "https://callbacks.example.com/upload",
-        statusCallbackUrl: "https://callbacks.example.com/status",
-      }),
-    ]) as IncomingMessage;
-    const config = {
-      ...callbackConfig,
-      maxBodySizeBytes: 10,
-    };
-
-    await expect(readSynthesizeRequest(request, config)).rejects.toMatchObject({
-      statusCode: 413,
-      code: "request-body-too-large",
-    });
   });
 });

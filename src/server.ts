@@ -5,8 +5,14 @@ import {
   type ServerResponse,
 } from "node:http";
 
+import type { AmqpBroker } from "./services/index.js";
+
 import { withLogging } from "./middlewares/index.js";
-import { handleHealth, handleSpeak } from "./routes/index.js";
+import {
+  createHandleSynthesize,
+  handleHealth,
+  handleSpeak,
+} from "./routes/index.js";
 import {
   connectAmqpBroker,
   verifyFfmpegInstallation,
@@ -21,10 +27,11 @@ export const logger = createLogger(
   config.service.name,
 );
 
-/**
- * Creates the API server.
- */
-function createServer(): Server {
+function createServer(broker: Pick<AmqpBroker, "publish">): Server {
+  const handleSynthesize = createHandleSynthesize({
+    broker,
+    config: config.synthesize,
+  });
   const handler = async (
     req: IncomingMessage,
     res: ServerResponse,
@@ -44,6 +51,11 @@ function createServer(): Server {
       return;
     }
 
+    if (req.method === "POST" && req.url === "/synthesize") {
+      await handleSynthesize(req, res);
+      return;
+    }
+
     sendText(res, 404, "Not Found");
   };
 
@@ -58,7 +70,7 @@ async function bootstrap(): Promise<void> {
   verifyFfmpegInstallation();
 
   const broker = await connectAmqpBroker(config.synthesize.rabbitmq);
-  const server = createServer();
+  const server = createServer(broker);
 
   registerShutdown(server, broker);
 

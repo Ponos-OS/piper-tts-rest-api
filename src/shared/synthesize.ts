@@ -1,8 +1,4 @@
-import type { IncomingMessage } from "node:http";
-
 import type { SynthesizeConfig } from "./config.js";
-
-import { readRawBody, RequestBodyTooLargeError } from "./utils/index.js";
 
 export function parseSynthesizeRequest(
   rawBody: string,
@@ -37,29 +33,6 @@ export function parseSynthesizeRequest(
     statusCallbackUrl,
     ...(callbackToken === undefined ? {} : { callbackToken }),
   };
-}
-
-export async function readSynthesizeRequest(
-  req: IncomingMessage,
-  config: Pick<SynthesizeConfig, "maxBodySizeBytes" | "callback">,
-): Promise<SynthesizeRequest> {
-  try {
-    const rawBody = await readRawBody(req, config.maxBodySizeBytes);
-    return parseSynthesizeRequest(rawBody, config);
-  } catch (error) {
-    if (error instanceof RequestBodyTooLargeError) {
-      throw requestBodyTooLargeError();
-    }
-    throw error;
-  }
-}
-
-export function requestBodyTooLargeError(): SynthesizeRequestError {
-  return new SynthesizeRequestError(
-    413,
-    "request-body-too-large",
-    "Request body too large",
-  );
 }
 
 function validateCallbackUrl(
@@ -126,12 +99,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export interface SynthesizeRequest {
-  text: string;
-  genUploadUrl: string;
-  statusCallbackUrl: string;
-  callbackToken?: string;
-}
 export interface SynthesizeJobMessage extends SynthesizeRequest {
   jobId: string;
 }
@@ -168,6 +135,12 @@ export type SynthesizeErrorCode =
   | "invalid-request"
   | "invalid-callback-url"
   | "request-body-too-large";
+export interface SynthesizeRequest {
+  text: string;
+  genUploadUrl: string;
+  statusCallbackUrl: string;
+  callbackToken?: string;
+}
 
 export class SynthesizeRequestError extends Error {
   readonly statusCode: 400 | 413;

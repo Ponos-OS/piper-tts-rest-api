@@ -7,9 +7,11 @@ import type {
 
 import { connect } from "amqplib";
 
-import type { SynthesizeConfig } from "../shared/index.js";
+import {
+  SYNTHESIZE_ROUTING_KEY,
+  type SynthesizeConfig,
+} from "../shared/index.js";
 
-const SYNTHESIZE_ROUTING_KEY = "synthesize";
 const QUORUM_DELIVERY_LIMIT = 5;
 
 export async function connectAmqpBroker(

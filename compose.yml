@@ -9,6 +9,12 @@ services:
       - "3000:$PORT"
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3000}/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     depends_on:
       rabbitmq:
         condition: service_healthy
