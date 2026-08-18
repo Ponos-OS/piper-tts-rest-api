@@ -8,3 +8,4 @@ export {
   verifyPiperInstallation,
 } from "./piper.js";
 export * from "./synthesis.js";
+export * from "./synthesize-worker.js";

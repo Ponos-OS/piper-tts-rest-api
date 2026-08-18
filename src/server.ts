@@ -5,8 +5,6 @@ import {
   type ServerResponse,
 } from "node:http";
 
-import type { AmqpBroker } from "./services/index.js";
-
 import { withLogging } from "./middlewares/index.js";
 import {
   createHandleSynthesize,
@@ -14,7 +12,10 @@ import {
   handleSpeak,
 } from "./routes/index.js";
 import {
+  type AmqpBroker,
   connectAmqpBroker,
+  startSynthesizeWorker,
+  type SynthesizeWorker,
   verifyFfmpegInstallation,
   verifyPiperInstallation,
 } from "./services/index.js";
@@ -71,8 +72,13 @@ async function bootstrap(): Promise<void> {
 
   const broker = await connectAmqpBroker(config.synthesize.rabbitmq);
   const server = createServer(broker);
+  const worker = await startSynthesizeWorker(
+    broker,
+    config.synthesize,
+    config.piperModelPath,
+  );
 
-  registerShutdown(server, broker);
+  registerShutdown(server, broker, worker);
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -90,6 +96,7 @@ async function bootstrap(): Promise<void> {
 function registerShutdown(
   server: Server,
   broker: Awaited<ReturnType<typeof connectAmqpBroker>>,
+  worker: SynthesizeWorker,
 ): void {
   let shuttingDown = false;
 
@@ -101,12 +108,15 @@ function registerShutdown(
     shuttingDown = true;
 
     server.close(() => {
-      void broker.close().catch((error: unknown) => {
-        logger.error("Failed to close AMQP broker", {
-          context: "Shutdown",
-          error: error instanceof Error ? error.message : String(error),
+      void worker
+        .close()
+        .then(() => broker.close())
+        .catch((error: unknown) => {
+          logger.error("Failed to close AMQP broker", {
+            context: "Shutdown",
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
-      });
     });
   };
 

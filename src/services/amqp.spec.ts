@@ -31,6 +31,7 @@ function createClient(): {
       .fn()
       .mockResolvedValue({ consumerTag: "consumer-1" } as never),
     cancel: jest.fn().mockResolvedValue({} as never),
+    nack: jest.fn(),
     close: jest.fn().mockResolvedValue(undefined as never),
   } as any;
   const connection = {
@@ -151,5 +152,15 @@ describe(connectAmqpBroker.name, () => {
     );
 
     expect(connection.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("should reject malformed messages without requeueing them", async () => {
+    const { client, channel } = createClient();
+    const broker = await connectAmqpBroker(rabbitmq, client);
+    const message = {} as never;
+
+    broker.reject(message, false);
+
+    expect(channel.nack).toHaveBeenCalledWith(message, false, false);
   });
 });

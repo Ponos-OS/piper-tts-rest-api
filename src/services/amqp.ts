@@ -122,6 +122,10 @@ class ConfirmedAmqpBroker implements AmqpBroker {
     this.#channel.ack(message);
   }
 
+  reject(message: ConsumeMessage, requeue: boolean): void {
+    this.#channel.nack(message, false, requeue);
+  }
+
   async close(): Promise<void> {
     if (this.#closed) {
       return;
@@ -152,6 +156,7 @@ export interface AmqpBroker {
   publish(message: AmqpPublishMessage): Promise<void>;
   consume(onMessage: (message: ConsumeMessage | null) => void): Promise<string>;
   acknowledge(message: ConsumeMessage): void;
+  reject(message: ConsumeMessage, requeue: boolean): void;
   close(): Promise<void>;
 }
 

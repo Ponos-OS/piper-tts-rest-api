@@ -134,7 +134,11 @@ export interface SynthesizeError {
 export type SynthesizeErrorCode =
   | "invalid-request"
   | "invalid-callback-url"
-  | "request-body-too-large";
+  | "request-body-too-large"
+  | "invalid-job-message"
+  | "generation-failed"
+  | "upload-url-failed"
+  | "upload-failed";
 export interface SynthesizeRequest {
   text: string;
   genUploadUrl: string;
