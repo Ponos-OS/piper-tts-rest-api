@@ -10,6 +10,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { logger, wordCounter } from "../shared/index.js";
+
 /**
  * Ensures Piper CLI and model are available before serving requests.
  */
@@ -39,6 +41,8 @@ export function verifyPiperInstallation(modelPath: string): void {
  * Read once at startup and cache the result; the model config is effectively immutable for the lifetime of the process.
  */
 export function readPiperModelSampleRate(modelPath: string): number {
+  logger.info(`Reading Piper model (${modelPath}) sample rate`);
+
   const configPath = `${modelPath}.json`;
   const raw = readFileSync(configPath, "utf8");
   const parsed = JSON.parse(raw) as { audio?: { sample_rate?: unknown } };
@@ -49,6 +53,8 @@ export function readPiperModelSampleRate(modelPath: string): number {
       `Invalid or missing audio.sample_rate in ${configPath} (got: ${String(rate)})`,
     );
   }
+
+  logger.verbose(`Piper model sample rate is: ${rate}`);
 
   return rate;
 }
@@ -157,6 +163,11 @@ export function spawnPiperPcmStdout(
   modelPath: string,
 ): ChildProcessWithoutNullStreams {
   const args = ["--model", modelPath, "--output-raw"];
+
+  logger.info(
+    `Initializing Piper pulse-code modulation stream with ${args.join(" ")} (${wordCounter(text)} words)`,
+  );
+
   const childProcess = spawn("piper", args, {
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -165,13 +176,12 @@ export function spawnPiperPcmStdout(
 
   childProcess.stdin.write(text + "\n"); // newline helps ensure synthesis starts
   childProcess.stdin.end();
+
   return childProcess;
 }
 
 /**
- * Spawn ffmpeg to read raw 16-bit signed little-endian mono PCM from
- * stdin (at `sampleRate` Hz) and encode MP3 to stdout. Pairs with
- * `spawnPiperPcmStdout`.
+ * @description Spawn ffmpeg to read raw 16-bit signed little-endian mono PCM from stdin (at `sampleRate` Hz) and encode MP3 to stdout. Pairs with `spawnPiperPcmStdout`.
  */
 export function spawnFfmpegMp3FromPcm(
   sampleRate: number,
@@ -195,6 +205,9 @@ export function spawnFfmpegMp3FromPcm(
     "mp3",
     "pipe:1",
   ];
+
+  logger.info(`ffmpeg PCM→MP3 encoder started: ${args.join(" ")}`);
+
   const childProcess = spawn("ffmpeg", args, {
     stdio: ["pipe", "pipe", "pipe"],
   });

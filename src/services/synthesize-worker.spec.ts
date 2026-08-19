@@ -5,6 +5,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { logger } from "../shared/index.js";
+
 const readPiperModelSampleRateMock = jest.fn();
 const synthesizeTextToMp3FileMock = jest.fn();
 
@@ -126,6 +128,45 @@ describe(startSynthesizeWorker.name, () => {
     });
     expect(broker.publish).not.toHaveBeenCalled();
     expect(broker.reject).not.toHaveBeenCalled();
+  });
+
+  it("should log only the redacted upload URL", async () => {
+    // Arrange
+    const infoSpy = jest.spyOn(logger, "info");
+    const { broker, deliver } = createBroker();
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            uploadUrl: "https://storage.example.com/job.mp3?token=secret",
+          }),
+          {
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    // Act
+    await startSynthesizeWorker(
+      broker,
+      config,
+      "/app/models/en_US-lessac-medium.onnx",
+    );
+    deliver(message());
+    await waitFor(
+      () => jest.mocked(broker.acknowledge).mock.calls.length === 1,
+    );
+
+    const urlCalls = infoSpy.mock.calls.filter(
+      ([msg]) => typeof msg === "string" && /https?:\/\//.test(msg),
+    );
+    expect(JSON.stringify(urlCalls)).toInclude(
+      "https://storage.example.com/job.mp3?token=***",
+    );
   });
 
   it("should publish a retry with incremented attempt count and delay before acknowledging the failed message", async () => {

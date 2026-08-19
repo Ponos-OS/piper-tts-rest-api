@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+import { logger, wordCounter } from "../shared/index.js";
 import { spawnFfmpegMp3FromPcm, spawnPiperPcmStdout } from "./piper.js";
 
 const ESTIMATED_MP3_BITRATE_KBPS = 128;
@@ -22,6 +23,12 @@ export async function synthesizeTextToMp3File(
   wordsPerMinute: number,
   options: SynthesizeTextToMp3FileOptions = {},
 ): Promise<SynthesisFile> {
+  logger.info(
+    `Synthesizing text with ${wordCounter(text)} words using ${modelPath} at ${sampleRate}Hz (${wordsPerMinute} words/min)`,
+    { context: "synthesizeTextToMp3File" },
+  );
+
+  const startedAt = performance.now();
   const workDir = await mkdtemp(join(tmpdir(), "piper-tts-"));
   const filePath = join(workDir, "audio.mp3");
   let cleaned = false;
@@ -40,7 +47,6 @@ export async function synthesizeTextToMp3File(
     ESTIMATED_MP3_BITRATE_KBPS,
   );
   let bytesWritten = 0;
-  const startedAt = performance.now();
   let piper: ChildProcessWithoutNullStreams | undefined;
   let ffmpeg: ChildProcessWithoutNullStreams | undefined;
 
@@ -78,13 +84,23 @@ export async function synthesizeTextToMp3File(
     throwForFailedChild("Piper", piper);
     throwForFailedChild("ffmpeg", ffmpeg);
 
-    return {
+    const result = {
       filePath,
       fileSizeBytes: bytesWritten,
       generationDurationMs: performance.now() - startedAt,
       cleanup,
     };
+
+    logger.info(
+      `Synthesized text in ${result.filePath} (file size: ${result.fileSizeBytes}) in ${result.generationDurationMs} milliseconds`,
+      { context: "synthesizeTextToMp3File" },
+    );
+
+    return result;
   } catch (error) {
+    logger.warn("Synthesizing text failed, cleaning up...", {
+      context: "synthesizeTextToMp3File",
+    });
     if (piper) {
       killSafely(piper);
     }
@@ -112,7 +128,7 @@ export function estimateMp3Bytes(
   wordsPerMinute: number,
   bitrateKbps: number,
 ): number {
-  const words = text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
+  const words = wordCounter(text);
   const seconds = (words / wordsPerMinute) * 60;
 
   return Math.max(1, Math.ceil(seconds * ((bitrateKbps * 1_000) / 8)));
@@ -142,6 +158,11 @@ export function createThrottledProgressReporter(
   onProgress: SynthesizeTextToMp3FileOptions["onProgress"],
   intervalMs: number,
 ): (percent: number) => void {
+  logger.info(
+    `Progress reporter initialized (throttled to ${intervalMs}ms intervals)`,
+    { context: "createThrottledProgressReporter" },
+  );
+
   let lastPercent = -1;
   let lastReportedAt = Number.NEGATIVE_INFINITY;
 
@@ -193,6 +214,7 @@ function killSafely(child: ChildProcessWithoutNullStreams): void {
   if (child.exitCode !== null || child.signalCode !== null) {
     return;
   }
+
   try {
     child.kill("SIGKILL");
   } catch {

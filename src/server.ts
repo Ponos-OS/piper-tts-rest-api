@@ -19,14 +19,7 @@ import {
   verifyFfmpegInstallation,
   verifyPiperInstallation,
 } from "./services/index.js";
-import { config, createLogger, sendText } from "./shared/index.js";
-
-// Create logger instance
-export const logger = createLogger(
-  config.log.level,
-  config.log.mode,
-  config.service.name,
-);
+import { config, logger, sendText } from "./shared/index.js";
 
 function createServer(broker: Pick<AmqpBroker, "publish">): Server {
   const handleSynthesize = createHandleSynthesize({
