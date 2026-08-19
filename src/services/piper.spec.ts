@@ -226,7 +226,7 @@ describe("verifyFfmpegInstallation", () => {
 
 describe("synthesizeTextToMp3Buffer", () => {
   const text = "hello world";
-  const modelPath = "/models/voice.onnx";
+  const modelPath = "/app/models/en_US-lessac-medium.onnx";
   const workDir = "/tmp/tts-api-abc123";
   const fileId = "11111111-1111-1111-1111-111111111111";
   const mp3Bytes = Buffer.from([0xff, 0xfb, 0x90, 0x00]);

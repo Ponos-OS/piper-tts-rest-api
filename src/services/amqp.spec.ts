@@ -104,20 +104,25 @@ describe(connectAmqpBroker.name, () => {
   it("waits for the broker to confirm every publish", async () => {
     const { client, channel } = createClient();
     const broker = await connectAmqpBroker(rabbitmq, client);
-    const content = Buffer.from('{"jobId":"job-1"}');
+    const content = Buffer.from(
+      '{"jobId":"8aa172c7-bd91-4c05-8ab7-549267cb8eec"}',
+    );
 
     await broker.publish({
       exchange: "synthesize",
       routingKey: "synthesize",
       content,
-      options: { persistent: true, messageId: "job-1" },
+      options: {
+        persistent: true,
+        messageId: "8aa172c7-bd91-4c05-8ab7-549267cb8eec",
+      },
     });
 
     expect(channel.publish).toHaveBeenCalledWith(
       "synthesize",
       "synthesize",
       content,
-      { persistent: true, messageId: "job-1" },
+      { persistent: true, messageId: "8aa172c7-bd91-4c05-8ab7-549267cb8eec" },
     );
     expect(channel.waitForConfirms).toHaveBeenCalledTimes(1);
   });

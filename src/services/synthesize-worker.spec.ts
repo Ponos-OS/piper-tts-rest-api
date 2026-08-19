@@ -121,7 +121,7 @@ describe(startSynthesizeWorker.name, () => {
     expect(await requestBody(fetchMock.mock.calls[4][1]?.body)).toEqual({
       attempt: 1,
       fileSizeBytes: 4,
-      jobId: "job-1",
+      jobId: "2bce49d6-6592-4ed3-b421-f913b9ecc3bd",
       status: "completed",
     });
     expect(broker.publish).not.toHaveBeenCalled();
@@ -191,7 +191,7 @@ describe(startSynthesizeWorker.name, () => {
       expect.objectContaining({
         attempt: 1,
         error: { code: "upload-url-failed", message: "HTTP 400" },
-        jobId: "job-1",
+        jobId: "2bce49d6-6592-4ed3-b421-f913b9ecc3bd",
         status: "failed",
       }),
     );
@@ -243,12 +243,12 @@ function message(headers: Record<string, unknown> = {}): ConsumeMessage {
     content: Buffer.from(
       JSON.stringify({
         genUploadUrl: "https://client.example.com/upload-url",
-        jobId: "job-1",
+        jobId: "2bce49d6-6592-4ed3-b421-f913b9ecc3bd",
         statusCallbackUrl: "https://client.example.com/status",
         text: "hello world",
       }),
     ),
-    properties: { headers, messageId: "job-1" },
+    properties: { headers, messageId: "2bce49d6-6592-4ed3-b421-f913b9ecc3bd" },
   } as ConsumeMessage;
 }
 
