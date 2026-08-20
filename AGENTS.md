@@ -7,3 +7,4 @@ The coding guidelines for this project are maintained in [CONTRIBUTING.md](.gith
 - Treat existing domain names, status values, event fields, and their JSDoc as authoritative. Do not repurpose a field or invent something without explicit approval. Ask if the intended semantics are unclear.
 - Before reporting completion, run the relevant build and tests. If pre-existing or user-introduced tests fail, report the exact failure without modifying unrelated code.
 - Do not expand an implementation step beyond the requested scope. Record deferred work in the plan instead of implementing it early.
+- Before adding a file, dependency, service, Compose configuration, or deployment topology, first look for an existing approved pattern. If the required shape is not explicit, ask before introducing one.

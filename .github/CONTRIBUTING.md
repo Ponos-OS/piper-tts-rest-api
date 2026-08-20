@@ -8,6 +8,8 @@ pnpm run init
 
 ```bash
 ./test.sh # Single request test
+pnpm test
+pnpm test:e2e
 ```
 
 To test the service under load:
