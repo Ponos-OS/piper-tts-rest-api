@@ -10,9 +10,7 @@
     "start": "node --import ./dist/instrumentation.js dist/server.js # ⚠️ The OpenTelemetry SDK is NOT imported in `server.ts`. It is bootstrapped via Node's `--import ./dist/instrumentation.js` flag so that the SDK starts in a preload phase BEFORE this module's `import` statements are evaluated. That ordering is required for `@opentelemetry/instrumentation-http` to monkey-patch `node:http` before we hand `createHttpServer` a route handler. A regular side-effect import here would not work: ESM hoists every `import` in a module to the top of its evaluation phase, so `node:http` would be resolved (and its exports captured) before `instrumentation.js`'s body — and thus `sdk.start()` — ever runs.",
     "dev": "tsc --watch",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest src --testPathIgnorePatterns=\\.integration\\.spec\\.ts$",
-    "pretest:e2e": "docker compose up --detach --build --wait --wait-timeout=120 piper-tts",
-    "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --testPathPatterns=^tests/.*\\.e2e\\.spec\\.ts$",
-    "posttest:e2e": "docker compose stop piper-tts rabbitmq otel-collector otel-healthcheck",
+    "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --testPathPatterns=^tests/.*\\.e2e\\.spec\\.ts$",
     "lint": "eslint src/ --fix",
     "format": "prettier . -w -u",
     "prepare": "husky || true"
@@ -56,7 +54,9 @@
     "jest": "^30.4.2",
     "jest-extended": "^7.0.0",
     "lint-staged": "^16.4.0",
+    "minio": "^8.0.7",
     "prettier": "^3.8.1",
+    "testcontainers": "^12.1.0",
     "ts-jest": "^29.4.11",
     "typescript": "6.0.3"
   },

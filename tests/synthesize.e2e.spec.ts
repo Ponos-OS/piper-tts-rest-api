@@ -1,62 +1,47 @@
-import { type Channel, connect, type GetMessage } from "amqplib";
+import {
+  jobIdOf,
+  startSynthesizeE2eStack,
+  statusOf,
+  type SynthesizeE2eStack,
+  waitFor,
+} from "./synthesize-e2e-stack.js";
 
 describe("POST /synthesize", () => {
-  beforeEach(async () => {
-    const connection = await connect("amqp://localhost:5672");
-    const channel = await connection.createChannel();
-    await channel.purgeQueue("synthesize.work");
-    await channel.close();
-    await connection.close();
+  let stack: SynthesizeE2eStack;
+
+  beforeAll(async () => {
+    stack = await startSynthesizeE2eStack();
+  }, 600_000);
+
+  afterAll(async () => {
+    await stack.stop();
   });
 
-  it("should accept a real HTTP request & durably publishes its job to RabbitMQ", async () => {
-    const response = await fetch("http://localhost:3000/synthesize", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        text: "Hello from the HTTP integration test",
-        genUploadUrl: "https://callbacks.example.com/upload-url",
-        statusCallbackUrl: "https://callbacks.example.com/status",
-      }),
-    });
-    const payload = (await response.json()) as { jobId: string };
-    const message = await getMessage();
+  it("should call its callbacks and uploads the generated MP3 to MinIO", async () => {
+    const job = await stack.prepareJob();
+    const { jobId } = await stack.submit(
+      job,
+      "Hello from the Testcontainers end-to-end test.",
+    );
+    await waitFor(async () =>
+      (await stack.callbacks(job)).some(
+        (request) => statusOf(request) === "completed",
+      ),
+    );
 
-    expect(response.status).toBe(202);
-    expect(payload.jobId).toMatch(
+    expect(jobId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     );
-    expect(message.properties.messageId).toBe(payload.jobId);
-    expect(message.properties.deliveryMode).toBe(2);
-    expect(JSON.parse(message.content.toString("utf8"))).toEqual({
-      jobId: payload.jobId,
-      text: "Hello from the HTTP integration test",
-      genUploadUrl: "https://callbacks.example.com/upload-url",
-      statusCallbackUrl: "https://callbacks.example.com/status",
-    });
-  });
+    const callbacks = await stack.callbacks(job);
+    expect(callbacks.every((request) => jobIdOf(request) === jobId)).toBe(true);
+    expect(callbacks.map(statusOf)).toEqual(
+      expect.arrayContaining([
+        "queued",
+        "generating",
+        "uploading",
+        "completed",
+      ]),
+    );
+    expect(await stack.objectSize(job)).toBeGreaterThan(0);
+  }, 60_000);
 });
-
-async function getMessage(): Promise<GetMessage> {
-  const connection = await connect("amqp://localhost:5672");
-  const channel = await connection.createChannel();
-  const message = await waitForMessage(channel, "synthesize.work");
-  channel.ack(message);
-  await channel.close();
-  await connection.close();
-  return message;
-}
-
-async function waitForMessage(
-  channel: Channel,
-  queue: string,
-): Promise<GetMessage> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    const message = await channel.get(queue, { noAck: false });
-    if (message !== false) {
-      return message;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error("Timed out waiting for a published synthesize job");
-}
