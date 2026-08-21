@@ -25,13 +25,11 @@ export function parseSynthesizeRequest(
     readNonEmptyString(payload.statusCallbackUrl, "statusCallbackUrl"),
     config,
   );
-  const callbackToken = readOptionalToken(payload.callbackToken);
 
   return {
     text,
     genUploadUrl,
     statusCallbackUrl,
-    ...(callbackToken === undefined ? {} : { callbackToken }),
   };
 }
 
@@ -75,18 +73,6 @@ function readNonEmptyString(value: unknown, field: string): string {
   return value.trim();
 }
 
-function readOptionalToken(value: unknown): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string" || value.trim() === "") {
-    throw invalidRequest(
-      "callbackToken must be a non-empty string when provided",
-    );
-  }
-  return value;
-}
-
 function invalidRequest(message: string): SynthesizeRequestError {
   return new SynthesizeRequestError(400, "invalid-request", message);
 }
@@ -99,6 +85,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export interface SynthesizeJobHeader {
+  [x: string]: unknown;
+  timestamp: number;
+  authorization?: string;
+}
 export interface SynthesizeJobMessage extends SynthesizeRequest {
   jobId: string;
 }
@@ -143,7 +134,6 @@ export interface SynthesizeRequest {
   text: string;
   genUploadUrl: string;
   statusCallbackUrl: string;
-  callbackToken?: string;
 }
 
 export class SynthesizeRequestError extends Error {

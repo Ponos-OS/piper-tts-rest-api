@@ -128,6 +128,35 @@ describe(createHandleSynthesize.name, () => {
     );
   });
 
+  it("should add auth token to the message header", async () => {
+    const broker = createBroker();
+    const handleSynthesize = createHandleSynthesize({
+      broker,
+      config: synthesizeConfig,
+    });
+    const req = createRequest({ Authorization: "Basic someToken" });
+    const res = createResponse();
+    const parent = trace.wrapSpanContext({
+      traceId: "2ab95b2d9df64fda9b7c219d0a69b2c6",
+      spanId: "7f2b0352f06847b2",
+      traceFlags: TraceFlags.SAMPLED,
+    });
+
+    await context.with(trace.setSpan(context.active(), parent), () =>
+      handleSynthesize(req, res),
+    );
+
+    expect(broker.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          headers: expect.objectContaining({
+            authorization: "Basic someToken",
+          }),
+        }),
+      }),
+    );
+  });
+
   it("should return a 413 when the request is too large", async () => {
     const broker = createBroker();
     const config = { ...synthesizeConfig, maxBodySizeBytes: 10 };
@@ -157,7 +186,7 @@ function createBroker() {
   return broker;
 }
 
-function createRequest() {
+function createRequest(headers?: Record<string, string>) {
   const req = Readable.from([
     Buffer.from(
       JSON.stringify({
@@ -167,6 +196,7 @@ function createRequest() {
       }),
     ),
   ]) as IncomingMessage;
+  req.headers = headers ? headers : {};
 
   return req;
 }

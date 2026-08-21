@@ -15,6 +15,7 @@ import {
   type SynthesizeConfig,
   type SynthesizeErrorCode,
   type SynthesizeJobEvent,
+  SynthesizeJobHeader,
   type SynthesizeJobMessage,
 } from "../shared/index.js";
 import { readPiperModelSampleRate } from "./piper.js";
@@ -115,9 +116,10 @@ async function handleMessage(
   }
 
   const attempt = readAttempt(message.properties.headers?.["x-attempt"]);
-  const headers = message.properties.headers as Record<string, string>;
+  const headers = message.properties.headers as SynthesizeJobHeader;
   const parentContext = propagation.extract(context.active(), headers);
   const queuedAt = Number(headers.timestamp);
+  const authorization = headers.authorization;
   const startedAt = performance.now();
 
   await tracer.startActiveSpan(
@@ -140,8 +142,23 @@ async function handleMessage(
           }
           queueWaitSpan.end();
         });
-        await sendStatus(job, attempt, { status: "queued" }, config, signal);
-        await processJob(job, attempt, config, modelPath, sampleRate, signal);
+        await sendStatus(
+          job,
+          attempt,
+          { status: "queued" },
+          config,
+          signal,
+          authorization,
+        );
+        await processJob(
+          job,
+          attempt,
+          config,
+          modelPath,
+          sampleRate,
+          signal,
+          authorization,
+        );
 
         logJob(job, attempt, modelPath, "completed", {
           totalDurationMs: performance.now() - startedAt,
@@ -189,6 +206,7 @@ async function handleMessage(
               },
               config,
               signal,
+              authorization,
             );
             failureSpan.end();
           },
@@ -208,6 +226,7 @@ async function processJob(
   modelPath: string,
   sampleRate: number,
   signal: AbortSignal,
+  authorization?: string,
 ): Promise<void> {
   logger.info(`Processing ${job.jobId} (attempt #${attempt})`, {
     context: "processJob",
@@ -230,6 +249,7 @@ async function processJob(
               { status: "generating", percent },
               config,
               signal,
+              authorization,
             );
           },
         },
@@ -250,7 +270,13 @@ async function processJob(
       "synthesize.upload_url",
       async (span) => {
         try {
-          return await getUploadUrl(job, attempt, config, signal);
+          return await getUploadUrl(
+            job,
+            attempt,
+            config,
+            signal,
+            authorization,
+          );
         } finally {
           span.end();
         }
@@ -263,6 +289,7 @@ async function processJob(
       { status: "uploading", percent: 0 },
       config,
       signal,
+      authorization,
     );
 
     const uploadStartedAt = performance.now();
@@ -277,6 +304,7 @@ async function processJob(
           attempt,
           config,
           signal,
+          authorization,
         );
       } catch (error) {
         logUploadFailure(
@@ -303,6 +331,7 @@ async function processJob(
       { status: "completed", fileSizeBytes: synthesis.fileSizeBytes },
       config,
       signal,
+      authorization,
     );
   } finally {
     await synthesis.cleanup();
@@ -314,6 +343,7 @@ async function getUploadUrl(
   attempt: number,
   config: SynthesizeConfig,
   signal: AbortSignal,
+  authorization?: string,
 ): Promise<string> {
   logger.info(
     `Requesting a new presigned URL for a text ${job.text.length} character long (attempt: ${attempt})`,
@@ -322,11 +352,16 @@ async function getUploadUrl(
 
   const response = await fetchWithTimeout(
     job.genUploadUrl,
-    callbackRequest(job, attempt, {
-      jobId: job.jobId,
+    callbackRequest(
+      job,
       attempt,
-      contentType: CONTENT_TYPE,
-    }),
+      {
+        jobId: job.jobId,
+        attempt,
+        contentType: CONTENT_TYPE,
+      },
+      authorization,
+    ),
     config.genUploadUrlTimeoutMs,
     signal,
   );
@@ -367,6 +402,7 @@ async function uploadFile(
   attempt: number,
   config: SynthesizeConfig,
   signal: AbortSignal,
+  authorization?: string,
 ): Promise<void> {
   logger.info(
     `Initializing upload process: (file size: ${fileSizeBytes}, file path: ${filePath}, upload URL: ${redactPresignedUrl(uploadUrl)})`,
@@ -403,6 +439,7 @@ async function uploadFile(
       { status: "uploading", percent },
       config,
       signal,
+      authorization,
     );
   }, 500);
   const source = createReadStream(filePath);
@@ -465,6 +502,7 @@ async function sendStatus(
   status: WorkerStatus,
   config: SynthesizeConfig,
   signal: AbortSignal,
+  authorization?: string,
 ): Promise<void> {
   await tracer.startActiveSpan("synthesize.statusCallback", async (span) => {
     logger.info(
@@ -475,7 +513,12 @@ async function sendStatus(
     try {
       await fetchWithTimeout(
         job.statusCallbackUrl,
-        callbackRequest(job, attempt, { jobId: job.jobId, attempt, ...status }),
+        callbackRequest(
+          job,
+          attempt,
+          { jobId: job.jobId, attempt, ...status },
+          authorization,
+        ),
         config.statusCallbackTimeoutMs,
         signal,
       );
@@ -500,15 +543,14 @@ function callbackRequest(
   job: SynthesizeJobMessage,
   attempt: number,
   body: unknown,
+  authorization?: string,
 ): RequestInit {
   return {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Idempotency-Key": `${job.jobId}:${attempt}`,
-      ...(job.callbackToken === undefined
-        ? {}
-        : { Authorization: job.callbackToken }),
+      ...(authorization && { Authorization: authorization }),
     },
     body: JSON.stringify(body),
     redirect: "manual",
@@ -602,7 +644,7 @@ function isJob(value: unknown): value is SynthesizeJobMessage {
     ["jobId", "text", "genUploadUrl", "statusCallbackUrl"].every(
       (key) => typeof job[key] === "string" && job[key] !== "",
     ) &&
-    (job.callbackToken === undefined || typeof job.callbackToken === "string")
+    (job.authorization === undefined || typeof job.authorization === "string")
   );
 }
 

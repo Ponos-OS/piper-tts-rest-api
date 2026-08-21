@@ -110,7 +110,6 @@ For batch / offline-narration workloads — which is what this service is design
     | completed | fileSizeBytes | Upload succeeded – job done. |
     | failed | failedAt, error | Terminal failure – no more retries. |
     Percentages are stage‑local, approximate, and monotonic. Status delivery is best‑effort, timeouts or non‑2xx responses do not stop synthesis. Clients must tolerate duplicates, omissions, and out‑of‑order updates.
-  - `callbackToken`: (optional) will be forwarded as the Authorization header to both callbacks.
 - Success Response (202 Accepted):
   ```json
   { "jobId": "e52cbe80-17de-4204-a983-bb1c10c36341" }
@@ -122,17 +121,16 @@ For batch / offline-narration workloads — which is what this service is design
   - `503`: RabbitMQ publish failed.
 - Security:
   - Use HTTPS endpoints in production: the service enforces this by default (see configuration below).
-  - Do **not** put credentials in callback URLs: use the callbackToken header instead.
   - Presigned URLs are redacted in logs; only the deliberate redaction‑failure path writes full URLs, so keep log retention short and restrict access.
 - Example:
   ```shell
   curl -X POST http://localhost:3000/synthesize \
        -H 'Content-Type: application/json' \
+       -H 'Authorization: Bearer or-basic-piper-tts-rest-api-does-not-care' \
        -d '{
          "text": "Hello world, this is a test of the asynchronous synthesis API.",
          "genUploadUrl": "https://your-server.example/generate-upload-url",
-         "statusCallbackUrl": "https://your-server.example/synthesis-status",
-         "callbackToken": "Bearer your-secret-token-here"
+         "statusCallbackUrl": "https://your-server.example/synthesis-status"
        }'
   ```
 

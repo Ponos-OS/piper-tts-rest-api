@@ -16,7 +16,6 @@ describe(parseSynthesizeRequest.name, () => {
         text: "  Hello world  ",
         genUploadUrl: "https://callbacks.example.com/uploads",
         statusCallbackUrl: "https://callbacks.example.com/status",
-        callbackToken: "client-secret",
       }),
       callbackConfig,
     );
@@ -25,7 +24,6 @@ describe(parseSynthesizeRequest.name, () => {
       text: "Hello world",
       genUploadUrl: "https://callbacks.example.com/uploads",
       statusCallbackUrl: "https://callbacks.example.com/status",
-      callbackToken: "client-secret",
     });
   });
 
@@ -40,11 +38,6 @@ describe(parseSynthesizeRequest.name, () => {
       "missing upload URL",
       '{"text":"Hello","statusCallbackUrl":"https://callbacks.example.com/status"}',
       "genUploadUrl must be a non-empty string",
-    ],
-    [
-      "empty callback token",
-      '{"text":"Hello","genUploadUrl":"https://callbacks.example.com/upload","statusCallbackUrl":"https://callbacks.example.com/status","callbackToken":""}',
-      "callbackToken must be a non-empty string when provided",
     ],
   ])("should return a 400 error for %s", (_caseName, body, message) => {
     expect(() => parseSynthesizeRequest(body, callbackConfig)).toThrow(message);

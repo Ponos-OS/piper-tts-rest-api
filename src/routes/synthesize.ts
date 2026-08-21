@@ -17,6 +17,7 @@ import {
   sendJson,
   SYNTHESIZE_ROUTING_KEY,
   type SynthesizeConfig,
+  SynthesizeJobHeader,
   SynthesizeRequest,
   SynthesizeRequestError,
 } from "../shared/index.js";
@@ -42,7 +43,13 @@ export function createHandleSynthesize(
     await tracer.startActiveSpan("synthesize.enqueue", async (span) => {
       try {
         const timestamp = Date.now();
-        const headers: Record<string, string | number> = { timestamp };
+        const authorization = String(
+          req.headers.authorization ?? req.headers["Authorization"],
+        );
+        const headers: SynthesizeJobHeader = {
+          timestamp,
+          authorization,
+        };
 
         propagation.inject(context.active(), headers);
 
