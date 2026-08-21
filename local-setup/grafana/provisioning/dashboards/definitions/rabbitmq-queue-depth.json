@@ -1,0 +1,61 @@
+{
+  "title": "RabbitMQ Queue Depth",
+  "uid": "rabbitmq-queue-depth",
+  "panels": [
+    {
+      "title": "Messages Ready (work queue)",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages_ready{queue=\"synthesize.work\"}",
+          "legendFormat": "work"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 80 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Messages Ready (retry queue)",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages_ready{queue=\"synthesize.retry\"}",
+          "legendFormat": "retry"
+        }
+      ]
+    },
+    {
+      "title": "Messages Ready (DLQ)",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages_ready{queue=\"synthesize.dlq\"}",
+          "legendFormat": "dlq"
+        }
+      ]
+    },
+    {
+      "title": "Total Messages (all queues)",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages{queue=~\"synthesize.*\"}",
+          "legendFormat": "{{queue}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 36,
+  "version": 0
+}

@@ -1,0 +1,136 @@
+# Grafana Alerting provisioning configuration
+# Alert rules that evaluate Prometheus metrics and fire notifications when conditions are met
+# https://grafana.com/docs/grafana/latest/alerting/set-up/provision-alerting-resources/file-provisioning/
+
+apiVersion: 1
+
+groups:
+  # Default organization
+  - orgId: 1
+    name: "rabbitmq_queue_alerts"
+    # Folder name to store these rules in
+    folder: "RabbitMQ Alerts"
+    # How often Grafana evaluates all rules in this group.
+    # 60 seconds is a good balance between reactivity and load.
+    # 15 seconds for critical alerts.
+    interval: 60s
+    rules:
+      - uid: rabbitmq_work_queue_depth
+        title: "RabbitMQ Work Queue Depth > 100"
+        # The value that will be evaluated against the threshold.
+        # Since here we have only one query it is called simply "A".
+        condition: A
+        # List of queries
+        # This is where the PromQL query lives.
+        data:
+          # Label
+          - refId: A
+            # Tells Grafana which data source to query.
+            datasourceUid: prometheus
+            relativeTimeRange:
+              # look back 60 seconds
+              from: 60
+              # up to now
+              to: 0
+            model:
+              # The actual PromQL expression that retrieves the metric
+              # synthesize.work = SYNTHESIZE_WORK_QUEUE
+              expr: rabbitmq_queue_messages_ready{queue="synthesize.work"}
+              hide: false
+              # The step size (1s) used when querying Prometheus.
+              # Affects the granularity of the data points
+              intervalMs: 1000
+              # Limits the maximum number of data points returned.
+              # Here: ~12 hours worth at 1s intervals.
+              maxDataPoints: 43200
+              refId: A
+        # The alert must remain in a firing state for 1 minute continuously before it actually triggers.
+        for: 1m
+        # Defines what happens when the query returns no data (e.g., the metric is missing).
+        noDataState: Alerting
+        # Defines what happens when the query execution fails (e.g., Prometheus is down).
+        execErrState: Alerting
+        # Key‑value pairs attached to an alert notification.
+        # They are not used for evaluation, only for the message we send.
+        annotations:
+          # Short headline that appears in the alert (email, Slack, PagerDuty).
+          summary: "Work queue is backing up"
+          # Detailed explanation.
+          # The template {{ $values.A }} injects the actual numeric value of query A at the time of firing
+          description: |
+            The queue `synthesize.work` currently has {{ $values.A }} messages ready.
+            This exceeds the threshold of 100.
+            Check consumer health and processing speed.
+        # Metadata labels attached to the alert. Not shown in notifications by default.
+        # These are defined by us, meaning when this alert is fired we add these labels.
+        labels:
+          # Helps you route alerts to different channels (e.g., warning → Slack, critical → PagerDuty) and prioritize response.
+          severity: warning
+          # Lets you filter, silences, or group alerts by queue in the UI.
+          queue: work
+          # Useful for ownership; e.g. we can now assign alerts to the right team and avoid noise for others.
+          team: backend
+
+      - uid: rabbitmq_retry_queue_depth
+        title: "RabbitMQ Retry Queue Depth > 100"
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 60 # look back 60 seconds
+              to: 0 # up to now
+            model:
+              # Must be the same as SYNTHESIZE_RETRY_QUEUE
+              expr: rabbitmq_queue_messages_ready{queue="synthesize.retry"}
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        for: 1m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: "Retry queue is building up"
+          description: |
+            The queue `synthesize.retry` currently has {{ $values.A }} messages ready.
+            This exceeds the threshold of 100.
+            Check if retries are failing repeatedly.
+        labels:
+          severity: warning
+          queue: retry
+          team: backend
+
+      # --------------------------------------------------------------
+      # Alert for DLQ (dead letter queue) > 100 messages ready
+      # (DLQ should ideally be near zero; alert lower if you want)
+      # --------------------------------------------------------------
+      - uid: rabbitmq_dlq_depth
+        title: "RabbitMQ DLQ Depth > 100"
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 60 # look back 60 seconds
+              to: 0 # up to now
+            model:
+              # Must be the same as SYNTHESIZE_DEAD_LETTER_QUEUE
+              expr: rabbitmq_queue_messages_ready{queue="synthesize.dlq"}
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        for: 1m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: "Dead Letter Queue is growing"
+          description: |
+            The queue `synthesize.dlq` currently has {{ $values.A }} messages ready.
+            This exceeds the threshold of 100.
+            Investigate why messages are being dead-lettered.
+        labels:
+          severity: critical
+          queue: dlq
+          team: backend
