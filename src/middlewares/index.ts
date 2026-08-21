@@ -1,1 +1,1 @@
-export { createLoggingMiddleware, withLogging } from "./logging.js";
+export { withLogging } from "./logging.js";

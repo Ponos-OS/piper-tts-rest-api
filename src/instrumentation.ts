@@ -90,7 +90,7 @@ if (!config.otel.enabled) {
     /**
      * Without this, the bridge only injects trace context fields when there is already an `info`-level record being written by a configured transport. With it on, every log goes through the OTel logs pipeline regardless of winston's own transport configuration.
      */
-    disableLogSending: false,
+    disableLogSending: config.otel.winston.disableLogSending,
     /**
      * Inject `trace_id` / `span_id` / `trace_flags` into the JSON log lines winston writes to stdout too — useful when running without an OpenTelemetry Collector (local dev, debugging) so you can still grep traces in the terminal.
      */

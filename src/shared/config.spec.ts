@@ -1,4 +1,23 @@
-import { createSynthesizeConfig } from "./config.js";
+import { createOtelConfig, createSynthesizeConfig } from "./config.js";
+
+describe(createOtelConfig.name, () => {
+  it("should send Winston logs through the OpenTelemetry Logs SDK by default", () => {
+    expect(createOtelConfig({}).winston.disableLogSending).toBe(false);
+  });
+
+  it("should read the Winston log sending setting", () => {
+    expect(
+      createOtelConfig({ OTEL_WINSTON_DISABLE_LOG_SENDING: "true" }).winston
+        .disableLogSending,
+    ).toBe(true);
+  });
+
+  it("should reject an invalid Winston log sending setting", () => {
+    expect(() =>
+      createOtelConfig({ OTEL_WINSTON_DISABLE_LOG_SENDING: "yes" }),
+    ).toThrow("OTEL_WINSTON_DISABLE_LOG_SENDING must be either true or false");
+  });
+});
 
 describe(createSynthesizeConfig.name, () => {
   it("should use documented defaults", () => {

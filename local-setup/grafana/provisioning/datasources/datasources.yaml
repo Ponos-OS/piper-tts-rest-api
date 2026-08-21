@@ -1,0 +1,51 @@
+# Grafana Datasource Provisioning configuration file.
+# Grafana connects to Tempo and Loki backends when it starts.
+
+apiVersion: 1
+
+datasources:
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    # The docker service name, and port is coming from local-setup/tempo.yaml
+    url: http://tempo:3200
+    # Makes Tempo the default data source in Grafana (so when you open "Explore", it selects Tempo by default).
+    isDefault: true
+    # Configure the "Trace to Logs" feature.
+    jsonData:
+      tracesToLogsV2:
+        # Links the two data sources.
+        # Tells Tempo, "When I ask for logs, go ask the Loki data source that has this UID".
+        datasourceUid: loki
+        # Grafana queries Loki for a time range
+        # It takes the exact timestamp of the span and expands the query window by 2 seconds before and 2 seconds after.
+        # Logs and traces often have slight timestamp drift (milliseconds).
+        spanStartTimeShift: -2s
+        spanEndTimeShift: 2s
+        # Map Tempo trace attributes (tags) to Loki label keys
+        # Tempo traces have a tag called "service.name". Loki logs have a label called "service_name". This translates between the two naming conventions so the correlation works seamlessly.
+        tags:
+          - key: service.name
+            value: service_name
+        # Grafana automatically add the trace ID to the Loki query.
+        filterByTraceID: true
+        # It is usually left false because:
+        # - Most logging libraries do not propagate the Span ID to logs (only the Trace ID).
+        # - If you filter by Span ID and your logs don't have that attribute, you would get zero results.
+        filterBySpanID: false
+      # Disable "live streaming" of trace search results.
+      # Streaming can overwhelm your browser and the backend for large queries.
+      # Prevent Grafana from trying to stream results in real-time as they come in.
+      streamingEnabled:
+        search: false
+        metrics: false
+
+  - name: Loki
+    type: loki
+    uid: loki
+    # Grafana will proxy all requests to Loki through its own server (rather than the browser calling Loki directly).
+    # The standard and most secure mode.
+    access: proxy
+    # The docker service name, and port defined in local-setup/loki.yaml
+    url: http://loki:3100

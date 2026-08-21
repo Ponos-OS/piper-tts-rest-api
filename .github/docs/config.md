@@ -93,7 +93,12 @@ Switch voices via `PIPER_MODEL=/app/models/<voice>.onnx`.
     <tr>
       <td>OTEL_EXPORTER_OTLP_ENDPOINT</td>
       <td>(none)</td>
-      <td>OTLP HTTP base URL (e.g. <code>http://collector:4318</code>). <strong>The SDK appends <code>/v1/traces</code></strong>.</td>
+      <td>OTLP HTTP base URL (e.g. <code>http://collector:4318</code>). The SDK appends <code>/v1/traces</code> and <code>/v1/logs</code>.</td>
+    </tr>
+    <tr>
+      <td>OTEL_WINSTON_DISABLE_LOG_SENDING</td>
+      <td>false</td>
+      <td>Set to <code>false</code> to send Winston records to the OpenTelemetry Logs SDK and preserve native trace-to-log links. Set to <code>true</code> only when infrastructure collects stdout/stderr into the log backend and preserves the injected <code>trace_id</code>.</td>
     </tr>
     <tr>
       <td>OTEL_TRACES_SAMPLER</td>
@@ -129,6 +134,10 @@ Switch voices via `PIPER_MODEL=/app/models/<voice>.onnx`.
 </table>
 
 In production point `OTEL_EXPORTER_OTLP_ENDPOINT` to your own collector and set `OTEL_ENABLED=true`.
+
+The local Compose stack sends traces to Tempo and logs to Loki. Open Grafana at [http://localhost:3001](http://localhost:3001) and sign in with `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` (both default to `admin`). The provisioned **Observability / Piper TTS Observability** dashboard shows recent traces and logs. Opening a trace in Tempo provides a trace-to-logs link that queries Loki by trace ID. Local Grafana, Tempo, and Loki data is transient.
+
+Keep `OTEL_WINSTON_DISABLE_LOG_SENDING=false` unless a platform-level log collector sends the application's stdout/stderr to Loki. With the default, logs travel directly from Winston through OTLP to Loki and retain native trace context. With `true`, the application still writes trace-correlated fields to stdout, but the infrastructure must parse and preserve `trace_id` when it sends those logs to Loki; otherwise Grafana cannot find logs for a trace.
 
 ### Logging
 

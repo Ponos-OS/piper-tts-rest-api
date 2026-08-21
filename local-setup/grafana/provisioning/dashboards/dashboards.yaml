@@ -1,0 +1,24 @@
+# Grafana Dashboard Provisioning configuration file.
+# Automatically load dashboards from disk instead of requiring users to manually creating them.
+# Typically used in CI/CD pipelines where dashboard definitions are version-controlled in Git.
+
+apiVersion: 1
+
+# Each provider defines where and how Grafana should load dashboards.
+providers:
+  - name: Piper TTS REST API
+    # Default organization
+    orgId: 1
+    # The name of the folder in Grafana where these dashboards will be placed.
+    # Used to organize dashboards logically.
+    folder: Observability
+    # Other sources for a dashboard: database or HTTP endpoint.
+    type: file
+    # Grafana will not delete these dashboards from the database if the source file is removed from disk.
+    disableDeletion: true
+    editable: false
+    options:
+      # Where the dashboard JSON files are stored.
+      # Grafana scans this folder (and subfolders) for JSON files and loads them as dashboards.
+      # Usually a mounted volume containing your dashboard definitions.
+      path: /etc/grafana/provisioning/dashboards/definitions

@@ -1,0 +1,47 @@
+# Tempo is a distributed tracing backend.
+# Minimal setup meant for development, testing, or very small-scale production where high availability isn't required.
+
+server:
+  # Main query port
+  # Grafana instance connects to http://<tempo-ip>:3200 to search for and visualize traces.
+  http_listen_port: 3200
+
+# Stream the data back to Grafana in chunks rather than loading it all into memory at once.
+stream_over_http_enabled: true
+
+# Ingestion Front Door
+distributor:
+  receivers:
+    # Accepts traces in the standard OTLP format.
+    otlp:
+      # Used different port mapping from local-setup/otel-collector-config.yaml
+      protocols:
+        grpc:
+          # Accepts OTLP via gRPC.
+          endpoint: 0.0.0.0:4317
+        http:
+          # Accepts OTLP via HTTP.
+          endpoint: 0.0.0.0:4318
+
+# The Janitor/Housekeeper
+compactor:
+  compaction:
+    # PERMANENTLY DELETES trace data that is older than 24 hours.
+    # If you need traces to persist for a week or a month, you must increase this value.
+    block_retention: 24h
+
+# For prod use a mounted persistent storage instead.
+storage:
+  trace:
+    # Store traces on the local filesystem (as opposed to cloud storage like S3 or GCS).
+    backend: local
+    # Write-Ahead Log
+    wal:
+      # Temporary, high-speed storage area.
+      # Incoming traces are written here immediately to ensure durability (so if Tempo crashes, it doesn't lose traces it just received).
+      # Once a WAL segment is full or old enough, it is cut, compacted, and flushed to the "block" storage.
+      path: /tmp/tempo/wal
+    # Block Storage
+    local:
+      # The final, permanent (until retention kicks in) storage location.
+      path: /tmp/tempo/blocks

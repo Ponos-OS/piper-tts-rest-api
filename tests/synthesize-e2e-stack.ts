@@ -174,14 +174,35 @@ async function startTelemetry(
   network: StartedNetwork,
   containers: StartedTestContainer[],
 ): Promise<void> {
-  const jaeger = await new GenericContainer("jaegertracing/all-in-one:1.62.0")
-    .withEnvironment({ COLLECTOR_OTLP_ENABLED: "true" })
+  const tempo = await new GenericContainer("grafana/tempo:2.8.2")
+    .withCommand(["-config.file=/etc/tempo.yaml"])
+    .withCopyFilesToContainer([
+      {
+        source: resolve("local-setup/tempo.yaml"),
+        target: "/etc/tempo.yaml",
+      },
+    ])
     .withNetwork(network)
-    .withNetworkAliases("jaeger")
+    .withNetworkAliases("tempo")
     .withExposedPorts(4317)
-    .withWaitStrategy(Wait.forListeningPorts())
+    .withWaitStrategy(Wait.forLogMessage("Tempo started"))
     .start();
-  containers.push(jaeger);
+  containers.push(tempo);
+
+  const loki = await new GenericContainer("grafana/loki:3.6.2")
+    .withCommand(["-config.file=/etc/loki.yaml"])
+    .withCopyFilesToContainer([
+      {
+        source: resolve("local-setup/loki.yaml"),
+        target: "/etc/loki.yaml",
+      },
+    ])
+    .withNetwork(network)
+    .withNetworkAliases("loki")
+    .withExposedPorts(3100)
+    .withWaitStrategy(Wait.forLogMessage("server listening on addresses"))
+    .start();
+  containers.push(loki);
 
   const collector = await new GenericContainer(
     "otel/opentelemetry-collector-contrib:0.155.0",

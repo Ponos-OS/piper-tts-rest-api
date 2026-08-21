@@ -62,37 +62,72 @@ export const config = {
       "info") as LogLevel,
   },
 
-  otel: {
-    enabled: process.env.OTEL_ENABLED === "true",
+  otel: createOtelConfig(process.env),
+} as const;
+
+export interface OtelConfig {
+  enabled: boolean;
+  exporterEndpoint: string | undefined;
+  winston: {
+    disableLogSending: boolean;
+  };
+  batchConfig: {
+    maxPendingSpans: number;
+    spansPerExport: number;
+    flushIntervalMs: number;
+    exportTimeoutMs: number;
+  };
+  logsBatchConfig: {
+    maxPendingLogs: number;
+    logsPerExport: number;
+    flushIntervalMs: number;
+    exportTimeoutMs: number;
+  };
+}
+
+export function createOtelConfig(env: NodeJS.ProcessEnv): OtelConfig {
+  return {
+    enabled: env.OTEL_ENABLED === "true",
     /** @type {string | undefined} */
-    exporterEndpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    exporterEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    winston: {
+      /**
+       * Whether Winston records bypass the OpenTelemetry Logs SDK.
+       * @default false
+       */
+      disableLogSending: readBoolean(
+        env.OTEL_WINSTON_DISABLE_LOG_SENDING,
+        false,
+        "OTEL_WINSTON_DISABLE_LOG_SENDING",
+      ),
+    },
     batchConfig: {
       /**
        * @description Max spans held in the in-memory queue waiting to be exported. Spans beyond this cap are dropped (with a diag warning) — acts as a back-pressure safety valve if the collector is slow/unreachable.
        */
       maxPendingSpans: Number.parseInt(
-        process.env.OTEL_BATCH_MAX_PENDING_SPANS ?? "2048",
+        env.OTEL_BATCH_MAX_PENDING_SPANS ?? "2048",
         10,
       ),
       /**
        * @description Max spans sent in a single export request. The processor flushes immediately once the queue reaches this size, regardless of the scheduled delay. Smaller = more frequent, smaller payloads.
        */
       spansPerExport: Number.parseInt(
-        process.env.OTEL_BATCH_SPANS_PER_EXPORT ?? "512",
+        env.OTEL_BATCH_SPANS_PER_EXPORT ?? "512",
         10,
       ),
       /**
        * @description Interval at which the processor wakes up and flushes whatever is currently queued, even if `maxExportBatchSize` hasn't been reached. Trade-off: lower = fresher data in the backend, higher = fewer HTTP round-trips.
        */
       flushIntervalMs: Number.parseInt(
-        process.env.OTEL_BATCH_FLUSH_INTERVAL_MS ?? "5000",
+        env.OTEL_BATCH_FLUSH_INTERVAL_MS ?? "5000",
         10,
       ),
       /**
        * @description Hard deadline for a single export call to the OTLP endpoint. If the collector doesn't respond within this window the export is aborted and the spans in that batch are dropped (not retried).
        */
       exportTimeoutMs: Number.parseInt(
-        process.env.OTEL_BATCH_EXPORT_TIMEOUT_MS ?? "30000",
+        env.OTEL_BATCH_EXPORT_TIMEOUT_MS ?? "30000",
         10,
       ),
     },
@@ -102,27 +137,27 @@ export const config = {
     logsBatchConfig: {
       /** Max log records held in memory before back-pressure drops the oldest. */
       maxPendingLogs: Number.parseInt(
-        process.env.OTEL_LOGS_BATCH_MAX_PENDING ?? "2048",
+        env.OTEL_LOGS_BATCH_MAX_PENDING ?? "2048",
         10,
       ),
       /** Max log records flushed in a single export request. */
       logsPerExport: Number.parseInt(
-        process.env.OTEL_LOGS_BATCH_PER_EXPORT ?? "512",
+        env.OTEL_LOGS_BATCH_PER_EXPORT ?? "512",
         10,
       ),
       /** How often the processor flushes whatever is queued. */
       flushIntervalMs: Number.parseInt(
-        process.env.OTEL_LOGS_BATCH_FLUSH_INTERVAL_MS ?? "5000",
+        env.OTEL_LOGS_BATCH_FLUSH_INTERVAL_MS ?? "5000",
         10,
       ),
       /** Per-export hard deadline before the batch is aborted. */
       exportTimeoutMs: Number.parseInt(
-        process.env.OTEL_LOGS_BATCH_EXPORT_TIMEOUT_MS ?? "30000",
+        env.OTEL_LOGS_BATCH_EXPORT_TIMEOUT_MS ?? "30000",
         10,
       ),
     },
-  },
-} as const;
+  };
+}
 
 export interface SynthesizeConfig {
   /** Usually higher than the speak limitation. */

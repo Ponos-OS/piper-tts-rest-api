@@ -1,48 +1,82 @@
+# A configuration file for the OpenTelemetry Collector
+# A neutral, vendor-agnostic agent that receives telemetry data (traces and logs) from your applications, processes them (batches, samples, filters), and forwards them to your chosen backends.
+
 extensions:
   health_check:
+    # hit http://<collector-ip>:13133 to see if the collector is alive.
     endpoint: 0.0.0.0:13133
 
+# Data Ingress
 receivers:
+  # Accept telemetry data in the standard OTLP format.
   otlp:
     protocols:
+      # Accepts OTLP data via HTTP (used for logs, traces, and metrics).
       http:
         endpoint: 0.0.0.0:4318
+      # Accepts OTLP data via gRPC (more efficient, heavily used for traces).
       grpc:
         endpoint: 0.0.0.0:4317
 
+# Data Manipulation
 processors:
+  # Aggregates multiple incoming traces/logs into a single larger payload before sending them out.
   batch:
+    # Waits up to 5 seconds to fill a batch
     timeout: 5s
+    # Sends the batch once it reaches 512 items
     send_batch_size: 512
     send_batch_max_size: 2048
 
-  # Tail sampling — always keep error traces, probabilistically sample the rest.
+  # Tail sampling - always keep error traces, probabilistically sample the rest.
   tail_sampling:
+    # Waits 10 seconds for all spans of a trace to arrive
     decision_wait: 10s
     num_traces: 50000
     expected_new_traces_per_sec: 50
+    # The rules for what to keep.
     policies:
+      # Always keeps 100% of traces that have an ERROR status code.
       - name: keep-errors
         type: status_code
         status_code:
           status_codes: [ERROR]
+      # Non-error traces are sampled
       - name: probabilistic-sample
         type: probabilistic
         probabilistic:
+          # It keeps 100% of healthy traces right now.
+          # For prod the rule of thumb is to sample enough traces to give you statistical confidence.
+          # E.g., if you sample 10% and have 1000 requests, you're analyzing 100 requests, which is usually enough to spot latency trends.
+          # If your trace volume gets too high, you can lower it by reducing this number
           sampling_percentage: 100
 
+# Data Egress
 exporters:
-  otlp/jaeger:
-    endpoint: jaeger:4317
+  # Sends traces to Grafana Tempo using gRPC.
+  otlp_grpc/tempo:
+    endpoint: tempo:4317
     tls:
       insecure: true
-  debug:
-    verbosity: basic
+  # Sends logs to Grafana Loki using HTTP.
+  otlp_http/loki:
+    endpoint: http://loki:3100/otlp
 
+# Build the data pipelines.
 service:
   extensions: [health_check]
   pipelines:
     traces:
+      # Receives traces from your app.
       receivers: [otlp]
+      # Decides what to keep, then batch them
       processors: [tail_sampling, batch]
-      exporters: [otlp/jaeger]
+      # Dumps everything into Tempo
+      exporters: [otlp_grpc/tempo]
+    logs:
+      # Receives logs from your app.
+      receivers: [otlp]
+      # We just batch them, no sampling is needed for logs!
+      processors: [batch]
+      # Dumps everything into Loki
+      exporters: [otlp_http/loki]

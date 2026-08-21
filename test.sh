@@ -27,7 +27,7 @@ echo "Sending request with:"
 echo "  trace-id        = ${TRACE_ID}"
 echo "  parent-span-id  = ${PARENT_SPAN_ID}"
 echo "  traceparent     = ${TRACEPARENT}"
-echo "Look this trace up in Jaeger at http://localhost:16686 (service: piper-tts-rest-api)."
+echo "Open the trace and logs dashboard at http://localhost:3001/d/piper-tts-observability."
 
 curl -f \
 	-X POST http://localhost:3000/speak \
@@ -44,5 +44,7 @@ curl -f \
 # 	-o hello-world.mp3
 
 ls -lh hello-world.mp3
+
+echo "Sign in with GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD (admin / admin by default). BUT BEFORE YOU HAVE TO COMMENT THE LAST LINE."
 
 docker compose down

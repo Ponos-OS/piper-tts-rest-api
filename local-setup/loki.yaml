@@ -1,0 +1,47 @@
+# This file is a configuration file for Loki.
+# Loki is a log aggregation system inspired by Prometheus (part of the Grafana ecosystem).
+# https://grafana.com/docs/loki/latest/configure/
+
+# Only for development - never use this in production!
+auth_enabled: false
+
+# This is where we send logs (via /loki/api/v1/push) and query them.
+server:
+  http_listen_port: 3100
+
+common:
+  # Base directory for all Loki data; here it is a temporary storage
+  path_prefix: /tmp/loki
+  # Only one copy of each log entry; no redundancy
+  replication_factor: 1
+  # Service discovery for Loki instances (using in-memory storage, meaning it resets on restart)
+  ring:
+    kvstore:
+      store: inmemory
+  storage:
+    filesystem:
+      # Where compressed log chunks are stored
+      chunks_directory: /tmp/loki/chunks
+      # Where alerting/recording rules are stored
+      rules_directory: /tmp/loki/rules
+
+# Defines how logs are indexed and stored.
+# https://grafana.com/docs/loki/latest/operations/storage/schema/?pg=hp&plcmt=lt-box-logs#new-loki-installs
+schema_config:
+  configs:
+    # For a brand-new Loki deployment, set from to a date that is earlier than your oldest log. Otherwise they will be rejected by Loki
+    - from: 2026-01-01
+      # Uses Prometheus-style TSDB (time-series database) for indexing
+      store: tsdb
+      # Stores actual log data on local disk. Other options: S3, azure, gcs
+      object_store: filesystem
+      schema: v13
+      # Index files are stored with prefix index_ and rotated every 24 hours
+      # Loki creates a new, separate index table every single day instead of having one giant, unmanageable index file that grows forever.
+      index:
+        prefix: index_
+        period: 24h
+
+# Allows structured metadata fields in logs (like labels with complex values)
+limits_config:
+  allow_structured_metadata: true

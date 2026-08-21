@@ -68,15 +68,29 @@ services:
         echo "ERROR: otel-collector did not become healthy within 120s" >&2
         exit 1
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.62.0
+  tempo:
+    image: grafana/tempo:2.10.5
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./local-setup/tempo.yaml:/etc/tempo.yaml:ro
+
+  loki:
+    image: grafana/loki:3.6.2
+    command: ["-config.file=/etc/loki.yaml"]
+    volumes:
+      - ./local-setup/loki.yaml:/etc/loki.yaml:ro
+
+  grafana:
+    image: grafana/grafana:12.4.3
+    depends_on:
+      - tempo
+      - loki
     environment:
-      COLLECTOR_OTLP_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_PATHS_DATA: /tmp/grafana
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./local-setup/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      - 16686:16686 # UI
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:14269"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      - 3001:3000
