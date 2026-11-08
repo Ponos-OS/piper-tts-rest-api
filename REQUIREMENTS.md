@@ -10,7 +10,7 @@ Each step is small enough to review and study on its own, and ends with somethin
 
 ## Ground rules
 
-- Behavior parity is the goal. `.github/docs/APIs.md` and `.github/docs/config.md` are the contract; if the Go code and these docs disagree, the Go code is wrong.
+- Behavior parity is the goal. `.github/docs/APIs.md` and `.github/docs/config.md` are the contract; if the Go code and these docs disagree, the Go code is wrong, except for the deliberate changes recorded in the step notes (step 13 updates the docs).
 - No new features, no new env variables, no new endpoints.
 - Prefer the standard library. Every third-party dependency needs your approval before it is added (candidates are listed per step).
 - The TS code is a read-only reference for behavior. It may stop building or passing at any point; nothing is spent keeping it working. It is deleted in step 13.
@@ -171,6 +171,10 @@ Notes for review:
 - Goal: concurrency limiter, word counter, HTTP client call with timeout, body reading with a max size (413 on overflow).
 - Learn: goroutines vs event loop, buffered channels as semaphores (or `golang.org/x/sync/semaphore`), `context.WithTimeout`, `http.MaxBytesReader`, `io.Reader`.
 - Done when: the behavior in each TS spec is reproduced by a Go test.
+- Implemented: `internal/httpapi/semaphore.go` (buffered channel; `acquire(ctx)` / `release()`), `body.go` (`decodeJSON[T]`), `json.go` (`writeJSON`), and `internal/piper/wordcount.go` (`WordCount`). All are unexported except `WordCount`, which `synthesis` and `piper` share. They are wired into `/speak` in step 7.
+- Request bodies: `decodeJSON[T]` reads one JSON object with `http.MaxBytesReader`, rejects unknown fields and trailing data, and validates the result with `go-playground/validator` struct tags (the class-validator equivalent). It returns `errBodyTooLarge`, `errInvalidJSON` or a `*validationError` listing `{field, rule}` pairs (a wrong JSON type is rule `type`). An empty body counts as `{}`, so it fails `required`. `notblank` is a custom tag registered next to the validator. Step 7 maps these to 413, 400 and 400; step 8 reuses `decodeJSON` for `/synthesize`.
+- Differences: `acquire` takes a `context.Context`, so a request that disconnects while queued stops waiting (the TS semaphore waited forever). `/speak` no longer accepts a plain-text body: it takes only `{"text": "..."}`. Unknown fields are rejected, and a non-string `text` is a 400 naming the field (TS treated it as empty). `sendBinary` is not ported: `/speak` streams.
+- Not ported: `fetchWithTimeout`. In Go the caller passes `context.WithTimeout(parent, d)` to `http.NewRequestWithContext`, which covers both the timeout and the external abort. It is exercised with the callbacks in step 10. One difference: the Go timeout also covers reading the response body.
 
 ### 6. Piper and ffmpeg pipeline
 
@@ -183,7 +187,7 @@ Notes for review:
 ### 7. `POST /speak`
 
 - TS source: `src/routes/speak.ts`.
-- Goal: JSON and `text/plain` bodies, 400/413/500 mapping, streamed `audio/mpeg` with the documented headers, semaphore held for the whole request, client disconnect cancels the pipeline.
+- Goal: JSON body only (`{"text": "..."}`, trimmed), 400/413/500 mapping, streamed `audio/mpeg` with the documented headers, semaphore held for the whole request, client disconnect cancels the pipeline.
 - Learn: `http.Flusher`, `r.Context()` cancellation on disconnect, chunked responses, error handling after headers are sent.
 - Done when: the curl examples in `APIs.md` work and the cancellation scenario is tested.
 
@@ -231,6 +235,7 @@ Notes for review:
 - Dockerfile: multi-stage build with a Go builder; the runtime stage still needs Python venv with `piper-tts`, ffmpeg, voice models, so only the Node/pnpm parts disappear. Non-root user and healthcheck stay.
 - `compose.yml`: same services, only the app build changes.
 - CI: replace the Node jobs; `semantic-release` and Docker Hub release stay as they are.
+- Update `APIs.md` for the deliberate API changes (`/speak` accepts only JSON `{"text": "..."}`; error bodies for validation failures).
 - Update `README`/`APIs.md`/`config.md`/`CONTRIBUTING.md` only where they mention Node, pnpm, or vitest/jest, and replace `OTEL_WINSTON_DISABLE_LOG_SENDING` with `OTEL_LOG_SHIPPING` in `config.md`.
 - Cutover: compare the Go service's response headers, bodies, and callback payloads against `APIs.md` and the TS source, then delete `src/`, `package.json`, `pnpm-lock.yaml`, TS/ESLint/Jest configs, `.jscpd.json`, and husky hooks that call pnpm.
 - Release note: this is a breaking change only if any observable behavior differs; otherwise `refactor:`/`perf:` as you decide.

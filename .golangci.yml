@@ -74,6 +74,7 @@ linters:
             - $gostd
             - github.com/kasir-barati/piper-tts-rest-api
             - github.com/go-chi/chi
+            - github.com/go-playground/validator
             - github.com/rabbitmq/amqp091-go
             - go.opentelemetry.io
         test:
@@ -202,6 +203,7 @@ linters:
         - name: modifies-value-receiver # not default
         - name: string-of-int # not default
         - name: struct-tag # not default
+          arguments: ["validate,notblank"] # notblank is registered in internal/httpapi/body.go
         - name: unconditional-recursion # not default
         - name: useless-break # not default
         - name: useless-fallthrough # not default
