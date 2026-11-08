@@ -1,0 +1,263 @@
+# https://golangci-lint.run/docs/linters/configuration/
+# Linters without settings: contextcheck, err113, errname, nilerr, noctx, tparallel, containedctx, intrange, wastedassign.
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - depguard
+    - dupl
+    - err113
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - funlen
+    - goconst
+    - gocognit
+    - gocritic
+    - gocyclo
+    - gosec
+    - intrange
+    - misspell
+    - mnd
+    - nakedret
+    - nestif
+    - nilerr
+    - noctx
+    - prealloc
+    - revive
+    - sloglint
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - wastedassign
+  settings:
+    errcheck:
+      check-type-assertions: true # not default (false)
+      check-blank: true # not default (false)
+      disable-default-exclusions: false
+      exclude-functions: []
+      verbose: false
+    govet:
+      enable-all: false
+      disable-all: false
+      enable: [shadow] # not default ([])
+      disable: []
+    ineffassign:
+      check-escaping-errors: false
+    staticcheck:
+      checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+      dot-import-whitelist: ["github.com/mmcloughlin/avo/build", "github.com/mmcloughlin/avo/operand", "github.com/mmcloughlin/avo/reg"]
+      initialisms: ["ACL", "API", "ASCII", "CPU", "CSS", "DNS", "EOF", "GUID", "HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "QPS", "RAM", "RPC", "SLA", "SMTP", "SQL", "SSH", "TCP", "TLS", "TTL", "UDP", "UI", "GID", "UID", "UUID", "URI", "URL", "UTF8", "VM", "XML", "XMPP", "XSRF", "XSS", "SIP", "RTP", "AMQP", "DB", "TS"]
+      http-status-code-whitelist: ["200", "400", "404", "500"]
+    unused:
+      field-writes-are-uses: true
+      post-statements-are-reads: false
+      exported-fields-are-used: true
+      parameters-are-used: true
+      local-variables-are-used: true
+      generated-is-used: true
+    bodyclose:
+      check-consumption: true # not default (false)
+    depguard:
+      rules:
+        main:
+          list-mode: original
+          files: ["$all", "!$test"]
+          allow:
+            - $gostd
+            - github.com/kasir-barati/piper-tts-rest-api
+            - github.com/go-chi/chi
+            - github.com/rabbitmq/amqp091-go
+            - go.opentelemetry.io
+        test:
+          list-mode: original
+          files: ["$test"]
+          allow:
+            - $gostd
+            - github.com/kasir-barati/piper-tts-rest-api
+            - github.com/go-chi/chi
+            - github.com/rabbitmq/amqp091-go
+            - go.opentelemetry.io
+            - github.com/stretchr/testify
+            - github.com/testcontainers/testcontainers-go
+    dupl:
+      threshold: 150
+    errchkjson:
+      check-error-free-encoding: false
+      report-no-exported: false
+    errorlint:
+      errorf: true
+      errorf-multi: true
+      asserts: true
+      comparison: true
+      allowed-errors: []
+      allowed-errors-wildcard: []
+    exhaustive:
+      check: [switch]
+      default-signifies-exhaustive: false
+      package-scope-only: false
+      default-case-required: false
+    funlen:
+      lines: 60
+      statements: 40
+      ignore-comments: true
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+      match-constant: true
+      numbers: false
+      min: 3
+      max: 3
+      ignore-calls: true
+      find-duplicates: false
+      eval-const-expressions: false
+      ignore-map-keys: false
+    gocognit:
+      min-complexity: 15
+    gocritic:
+      disable-all: false
+      enabled-checks: []
+      disabled-checks: []
+      enabled-tags: []
+      disabled-tags: []
+    gocyclo:
+      min-complexity: 10
+    gosec:
+      includes: []
+      excludes: []
+      severity: low
+      confidence: low
+    misspell:
+      ignore-rules: []
+      extra-words: []
+      mode: ""
+    mnd:
+      checks: [argument, case, condition, operation, return, assign]
+      ignored-numbers: []
+      ignored-files: []
+      ignored-functions: []
+    nakedret:
+      max-func-lines: 0
+    nestif:
+      min-complexity: 5
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+    revive:
+      severity: warning
+      confidence: 0.8
+      enable-all-rules: false
+      enable-default-rules: false
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: var-declaration
+        - name: var-naming
+        - name: early-return # not default
+        - name: unused-receiver # not default
+        - name: unchecked-type-assertion # not default
+        - name: deep-exit # not default
+        - name: datarace # not default
+        - name: defer # not default
+        - name: atomic # not default
+        - name: waitgroup-by-value # not default
+        - name: range-val-in-closure # not default
+        - name: range-val-address # not default
+        - name: bool-literal-in-expr # not default
+        - name: constant-logical-expr # not default
+        - name: identical-branches # not default
+        - name: identical-ifelseif-branches # not default
+        - name: identical-ifelseif-conditions # not default
+        - name: identical-switch-branches # not default
+        - name: identical-switch-conditions # not default
+        - name: duplicated-imports # not default
+        - name: import-shadowing # not default
+        - name: modifies-value-receiver # not default
+        - name: string-of-int # not default
+        - name: struct-tag # not default
+        - name: unconditional-recursion # not default
+        - name: useless-break # not default
+        - name: useless-fallthrough # not default
+        - name: time-equal # not default
+    sloglint:
+      no-mixed-args: true
+      kv-only: false
+      attr-only: true # not default (false)
+      no-global: ""
+      context: all # not default ("")
+      static-msg: true # not default (false)
+      msg-style: ""
+      no-raw-keys: true # not default (false)
+      args-on-sep-lines: false
+      allowed-keys: []
+      forbidden-keys: []
+      custom-funcs: []
+    testifylint:
+      enable-all: true # not default (false)
+      disable-all: false
+      enable: []
+      disable: []
+      bool-compare:
+        ignore-custom-types: false
+      formatter:
+        check-format-string: true
+        require-f-funcs: false
+        require-string-msg: true
+      go-require:
+        ignore-http-handlers: false
+      require-error:
+        fn-pattern: ""
+      suite-extra-assert-call:
+        mode: remove
+    thelper:
+      test: {first: true, name: true, begin: true}
+      benchmark: {first: true, name: true, begin: true}
+      tb: {first: true, name: true, begin: true}
+      fuzz: {first: true, name: true, begin: true}
+    unconvert:
+      fast-math: false
+      safe: false
+    unparam:
+      check-exported: true # not default (false)
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [mnd, err113, funlen, dupl] # not default
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      module-path: ""
+      extra-rules: false
+    goimports:
+      local-prefixes: []

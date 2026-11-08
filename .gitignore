@@ -6,3 +6,6 @@ coverage
 *.log
 *.env
 *.mp3
+# bin/ is for local builds (go build -o bin/<name> ./cmd/<name>); dist/ is for release artifacts, which we do not have because releases are Docker images built from the Dockerfile.
+/bin/
+*.test
