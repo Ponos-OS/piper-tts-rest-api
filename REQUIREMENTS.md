@@ -148,7 +148,9 @@ Notes for review:
 - Goal: `LOGGING_MODE` (PLAIN_TEXT or JSON), `LOGGING_LEVEL`, `service` and `context` fields, same shapes as shown in `config.md`.
 - Learn: `log/slog`, handlers, `slog.Attr`, passing a logger vs a global, `context.Context` basics.
 - Work: stdout handler only in this step; `OTEL_LOG_SHIPPING`, the OTel handler and `trace_id` injection are added in step 12 behind the same `internal/logging` constructor.
-- Open question: `verbose` has no slog level; decide the mapping.
+- Decided: `verbose` is `slog.Level(-2)` (`logging.LevelVerbose`), between info (0) and debug (-4), which is where Winston puts it. Level order is error, warn, info, verbose, debug, so `LOGGING_LEVEL=verbose` hides debug and `debug` shows everything.
+- Implemented in `internal/logging`: `New(cfg, service, w)` returns a `*slog.Logger`; `Named(l, "Bootstrap")` adds the `context` field. JSON mode is slog's JSON handler with `timestamp`/`level`/`message` renamed; PLAIN_TEXT is a small custom handler (`plain.go`) that prints the line and delegates the trailing JSON to an inner JSON handler.
+- Known differences from the Winston output: JSON fields are ordered `timestamp, level, message, service, context, ...` instead of `message` last (key order is not significant); PLAIN_TEXT also prints the lower-case level (padded to 7) after the timestamp, which the TS format omitted.
 - Done when: both output formats match the examples in `config.md`.
 
 ### 4. HTTP server, `GET /health`, request logging, graceful shutdown

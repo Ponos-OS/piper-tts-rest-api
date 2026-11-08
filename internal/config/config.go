@@ -8,14 +8,26 @@ import (
 
 // Environment names that relax the HTTPS callback requirement.
 const (
-	EnvDevelopment = "development"
-	EnvTest        = "test"
+	envDevelopment = "development"
+	envTest        = "test"
 )
 
-// LogShipping selects how logs leave the process when OpenTelemetry is on.
+// Values accepted by OTEL_LOG_SHIPPING.
 const (
-	LogShippingOTLP   = "otlp"
-	LogShippingStdout = "stdout"
+	logShippingOTLP   = "otlp"
+	logShippingStdout = "stdout"
+)
+
+// Log modes and levels accepted by LOGGING_MODE and LOGGING_LEVEL.
+const (
+	LogModePlainText = "PLAIN_TEXT"
+	LogModeJSON      = "JSON"
+
+	LogLevelError   = "error"
+	LogLevelWarn    = "warn"
+	LogLevelInfo    = "info"
+	LogLevelVerbose = "verbose"
+	LogLevelDebug   = "debug"
 )
 
 // Defaults match the documented values in docs/config.md.
@@ -38,14 +50,14 @@ const (
 	defaultPiperModelPath      = "/app/models/en_US-lessac-medium.onnx"
 	defaultRabbitMQURL         = "amqp://localhost:5672"
 	defaultEnvironment         = "production"
-	defaultLogMode             = "PLAIN_TEXT"
-	defaultLogLevel            = "info"
+	defaultLogMode             = LogModePlainText
+	defaultLogLevel            = LogLevelInfo
 	defaultExchange            = "synthesize"
 	defaultWorkQueue           = "synthesize.work"
 	defaultRetryQueue          = "synthesize.retry"
 	defaultDeadLetterExchange  = "synthesize.dlx"
 	defaultDeadLetterQueue     = "synthesize.dlq"
-	defaultOTLPLogShippingMode = LogShippingOTLP
+	defaultOTLPLogShippingMode = logShippingOTLP
 )
 
 // Config is the complete, validated service configuration.
@@ -158,8 +170,8 @@ func Load(lookup func(key string) (string, bool)) (Config, error) {
 		MaxBodySizeBytes: l.positiveInt("MAX_BODY_SIZE_BYTES", defaultMaxBodySizeBytes),
 		Synthesize:       loadSynthesize(l, service.Env),
 		Log: Log{
-			Mode:  l.oneOf("LOGGING_MODE", defaultLogMode, "PLAIN_TEXT", "JSON"),
-			Level: l.oneOf("LOGGING_LEVEL", defaultLogLevel, "error", "warn", "info", "debug", "verbose"),
+			Mode:  l.oneOf("LOGGING_MODE", defaultLogMode, LogModePlainText, LogModeJSON),
+			Level: l.oneOf("LOGGING_LEVEL", defaultLogLevel, LogLevelError, LogLevelWarn, LogLevelInfo, LogLevelDebug, LogLevelVerbose),
 		},
 		Otel: loadOtel(l),
 	}
@@ -190,7 +202,7 @@ func loadSynthesize(l *loader, env string) Synthesize {
 			DeadLetterQueue:    l.name("SYNTHESIZE_DEAD_LETTER_QUEUE", defaultDeadLetterQueue),
 		},
 		Callback: Callback{
-			RequireHTTPS: l.boolean("SYNTHESIZE_REQUIRE_HTTPS_CALLBACKS", env != EnvDevelopment && env != EnvTest),
+			RequireHTTPS: l.boolean("SYNTHESIZE_REQUIRE_HTTPS_CALLBACKS", env != envDevelopment && env != envTest),
 			AllowedHosts: l.hosts("SYNTHESIZE_CALLBACK_ALLOWED_HOSTS"),
 		},
 	}
@@ -217,7 +229,7 @@ func loadOtel(l *loader) Otel {
 		},
 	}
 	if otel.Enabled {
-		otel.LogShipping = l.oneOf("OTEL_LOG_SHIPPING", defaultOTLPLogShippingMode, LogShippingOTLP, LogShippingStdout)
+		otel.LogShipping = l.oneOf("OTEL_LOG_SHIPPING", defaultOTLPLogShippingMode, logShippingOTLP, logShippingStdout)
 	}
 
 	return otel
