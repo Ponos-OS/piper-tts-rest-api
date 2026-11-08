@@ -32,3 +32,14 @@ Retries consume queue capacity too. The retry queue is intentionally delayed and
 Use graceful termination periods long enough for the configured upload deadline or accept at-least-once reprocessing. A terminated worker can leave an unacknowledged message for redelivery; clients must tolerate duplicate callbacks and uploads.
 
 Run RabbitMQ with persistent storage and quorum-queue replication appropriate to the failure domain. Verify broker recovery and DLQ handling as part of deployment testing.
+
+### Shutdown and Stuck Requests
+
+On SIGTERM or SIGINT the service stops accepting new connections and waits for in-flight requests (for example a long `/speak` stream) to finish. It has no shutdown deadline of its own, so a stuck request, such as a client that stopped reading, keeps the process alive.
+
+Your orchestrator must enforce the limit and force-kill the container:
+
+- Kubernetes: set `terminationGracePeriodSeconds`; the kubelet sends SIGKILL when it expires (default 30s).
+- Docker: `docker stop -t <seconds>` or `stop_grace_period` in Compose; Docker sends SIGKILL when it expires (default 10s).
+
+A second SIGTERM or SIGINT makes the process exit immediately.

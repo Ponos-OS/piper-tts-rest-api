@@ -159,6 +159,11 @@ Notes for review:
 - Goal: server on `PORT`, `/health` returns `200 text/plain`, every request and response is logged, SIGTERM drains in-flight requests.
 - Learn: `net/http`, chi routing and `r.Use`, `http.Handler` and middleware as function wrapping, `httptest`, `signal.NotifyContext`, `Server.Shutdown`.
 - Done when: `curl /health` works and a test covers the middleware.
+- Implemented in `internal/httpapi` (`NewRouter`, request-logging middleware, `Serve`) and `cmd/server/main.go` (config, logger, signal handling, listener).
+- Parity: `/health` is not logged; unknown paths and wrong methods both return `404 text/plain "Not Found"`; the request log keeps `Incoming <METHOD> <url>` / `Completed ...` with `method`, `url`, `headers`, `statusCode`, `duration` (ms). Field shapes follow Go, not Node: `headers` is Go's `http.Header` (canonical names such as `X-Request-Id`, each value a list), not Node's lower-cased `req.headers` object. The Go service is a new major version and does not need to match the TS log shape.
+- Differences: the bootstrap messages are static (`TTS API running` with a `port` attribute, `Piper model` with a `path` attribute) because `sloglint` requires static messages; the request messages stay dynamic (documented format) behind a `//nolint:sloglint`. Go keeps the `Host` header out of `r.Header`, so it is not in the logged `headers`. Secrets are redacted (the TS service logged everything): headers and query parameters whose name contains `auth`, `token`, `secret`, `key`, `password`, `passwd`, `signature`, `credential`, `session` or `cookie` are logged as `[REDACTED]`; `Authorization` keeps its scheme (`Bearer [REDACTED]`).
+- Shutdown: first SIGTERM/SIGINT stops accepting and waits for in-flight requests with no deadline (like Node's `server.close`); a second signal kills the process. `ReadHeaderTimeout` is 10s; there is no read/write timeout because `/speak` streams. Decided: no in-process drain deadline; the orchestrator force-kills a stuck container, and this is documented in `.github/docs/scaling.md` (Shutdown and stuck requests).
+- Not yet: Piper/ffmpeg verification (step 6) and AMQP/worker startup (steps 9-10) in `main`.
 
 ### 5. Small utilities
 
