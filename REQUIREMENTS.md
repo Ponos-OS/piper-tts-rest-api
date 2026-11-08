@@ -99,7 +99,7 @@ The full configuration lives in `.golangci.yml` and is the source of truth. Ever
 - Stricter than default: `errcheck` `check-type-assertions` and `check-blank`; `govet` runs `shadow`; `bodyclose` `check-consumption`; `unparam` `check-exported`; `sloglint` `context: all`, `attr-only`, `static-msg`, `no-raw-keys`; `testifylint` `enable-all`.
 - Extra linters: `containedctx`, `gocritic`, `intrange`, `prealloc`, `thelper`, `wastedassign`.
 - Extra `revive` rules (marked `# not default` in the file), including `early-return`, `deep-exit`, `unchecked-type-assertion`, `datarace`, `defer`, `waitgroup-by-value`, `range-val-in-closure`, `identical-*` branch checks, `import-shadowing`.
-- Test files are excluded from `mnd`, `err113`, `funlen`, `dupl`.
+- Test files are excluded from `mnd`, `err113`, `funlen`, `dupl`, `goconst`.
 
 Other notes:
 
@@ -129,9 +129,18 @@ Notes for review:
 ### 2. Configuration
 
 - TS source: `src/shared/config.ts`, `config.spec.ts`.
-- Goal: one `Config` struct loaded from env with the same defaults and the same fail-fast validation (positive integers, HTTPS callbacks required unless `NODE_ENV` is development/test, comma-separated allowed hosts).
+- Goal: one `Config` struct loaded from env with the same defaults and the same fail-fast validation (positive integers, HTTPS callbacks required unless `APP_ENV` is development/test, comma-separated allowed hosts).
 - Learn: structs, `os.LookupEnv`, `strconv`, returning `error` instead of throwing, table-driven tests.
 - Done when: every row in `config.md` has a test (valid, default, invalid).
+- Implemented in `internal/config`: `Load(lookup)` takes an `os.LookupEnv`-shaped function (tests pass a map), converts `*_MS` variables to `time.Duration`, and returns all invalid variables at once through `errors.Join` instead of stopping at the first.
+- Deliberate differences from the TS code:
+  - `PORT`, `MAX_CONCURRENCY`, `MAX_BODY_SIZE_BYTES`, `OTEL_BATCH_*` and `OTEL_LOGS_BATCH_*` are now validated as positive integers (TS silently produced `NaN`); `+5`, `1.5` and values above 2^31-1 are rejected.
+  - `LOGGING_MODE` and `LOGGING_LEVEL` reject unknown values (TS cast them unchecked).
+  - `OTEL_LOG_SHIPPING` (`otlp` default, `stdout`) is validated only when `OTEL_ENABLED=true`; it replaces `OTEL_WINSTON_DISABLE_LOG_SENDING`.
+  - `NODE_ENV` is renamed `APP_ENV` (same values and default `production`); a breaking change for the major version.
+  - `OTEL_ENABLED` stays lenient: anything but exactly `true` means disabled.
+  - `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` and `OTEL_EXPORTER_OTLP_ENDPOINT` are read by the OTel Go SDK itself in step 12; the endpoint is still exposed on `Config` for logging and diagnostics.
+- Not wired yet: `main` does not call `Load` until step 4 needs it.
 
 ### 3. Logging
 

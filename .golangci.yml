@@ -249,7 +249,7 @@ linters:
   exclusions:
     rules:
       - path: _test\.go
-        linters: [mnd, err113, funlen, dupl] # not default
+        linters: [mnd, err113, funlen, dupl, goconst] # not default
 
 formatters:
   enable:
