@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/kasir-barati/piper-tts-rest-api/internal/amqp"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/httpapi"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
@@ -21,6 +22,7 @@ const (
 	keyPort       = "port"
 	keyPath       = "path"
 	keySampleRate = "sampleRate"
+	keyError      = "error"
 )
 
 func main() {
@@ -53,6 +55,16 @@ func run() error {
 		return fmt.Errorf("piper: %w", err)
 	}
 
+	broker, err := amqp.Connect(cfg.Synthesize.RabbitMQ)
+	if err != nil {
+		return fmt.Errorf("amqp: %w", err)
+	}
+	defer func() { // Cleanup: runs at the very end of the process's life.
+		if closeErr := broker.Close(); closeErr != nil {
+			logging.Named(logger, "Bootstrap").ErrorContext(context.WithoutCancel(ctx), "Closing RabbitMQ failed", slog.String(keyError, closeErr.Error()))
+		}
+	}()
+
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", ":"+strconv.Itoa(cfg.Service.Port))
 	if err != nil {
@@ -63,9 +75,16 @@ func run() error {
 	boot.InfoContext(ctx, "TTS API running", slog.Int(keyPort, cfg.Service.Port))
 	boot.InfoContext(ctx, "Piper model", slog.String(keyPath, cfg.PiperModelPath), slog.Int(keySampleRate, synth.SampleRate()))
 
-	if err := httpapi.Serve(ctx, ln, httpapi.NewRouter(logger, synth, httpapi.Options{
+	if err := httpapi.Serve(ctx, ln, httpapi.NewRouter(httpapi.Options{
+		Logger:           logger,
+		Synthesizer:      synth,
+		Jobs:             broker,
 		MaxConcurrency:   cfg.MaxConcurrency,
 		MaxBodySizeBytes: cfg.MaxBodySizeBytes,
+		Synthesize: httpapi.SynthesizeOptions{
+			MaxBodySizeBytes: cfg.Synthesize.MaxBodySizeBytes,
+			Callback:         cfg.Synthesize.Callback,
+		},
 	})); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}

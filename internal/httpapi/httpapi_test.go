@@ -26,7 +26,7 @@ func newRouter() (http.Handler, *bytes.Buffer) {
 	logger := logging.New(config.Log{Mode: config.LogModeJSON, Level: config.LogLevelInfo}, "svc", out)
 
 	// The tests using this router never reach /speak, so no synthesizer is needed.
-	return httpapi.NewRouter(logger, nil, httpapi.Options{MaxConcurrency: 1, MaxBodySizeBytes: 1000}), out
+	return httpapi.NewRouter(httpapi.Options{Logger: logger, MaxConcurrency: 1, MaxBodySizeBytes: 1000}), out
 }
 
 func do(t *testing.T, h http.Handler, method, target string, headers map[string]string) *httptest.ResponseRecorder {

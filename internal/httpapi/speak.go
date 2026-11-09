@@ -15,6 +15,7 @@ import (
 
 const (
 	keyError = "error"
+	keyJobID = "jobId"
 
 	chunkSize = 32 * 1024
 )
@@ -26,11 +27,6 @@ var (
 
 type speakRequest struct {
 	Text string `json:"text" validate:"required,notblank"`
-}
-
-type errorBody struct {
-	Error  string       `json:"error"`
-	Fields []fieldError `json:"fields,omitempty"`
 }
 
 type speaker struct {
@@ -52,7 +48,7 @@ func (s *speaker) handleSpeak(w http.ResponseWriter, r *http.Request) {
 
 	req, err := decodeJSON[speakRequest](w, r, s.maxBody)
 	if err != nil {
-		s.writeBodyError(w, r, err)
+		writeBodyError(w, r, s.log, err)
 
 		return
 	}
@@ -128,20 +124,4 @@ func writeAudioHeaders(w http.ResponseWriter) {
 	h.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%d-%s.mp3"`, time.Now().UnixMilli(), rand.Text()))
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
-}
-
-func (s *speaker) writeBodyError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid *validationError
-
-	switch {
-	case errors.Is(err, errBodyTooLarge):
-		writeJSON(w, http.StatusRequestEntityTooLarge, errorBody{Error: "Request body too large"})
-	case errors.As(err, &invalid):
-		writeJSON(w, http.StatusBadRequest, errorBody{Error: "Invalid request body", Fields: invalid.Fields})
-	case errors.Is(err, errInvalidJSON):
-		writeJSON(w, http.StatusBadRequest, errorBody{Error: "Invalid JSON body"})
-	default:
-		s.log.ErrorContext(r.Context(), "Reading the request body failed", slog.Any(keyError, err))
-		writeJSON(w, http.StatusInternalServerError, errorBody{Error: "Internal Server Error"})
-	}
 }

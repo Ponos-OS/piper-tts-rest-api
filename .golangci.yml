@@ -75,6 +75,7 @@ linters:
             - github.com/kasir-barati/piper-tts-rest-api
             - github.com/go-chi/chi
             - github.com/go-playground/validator
+            - github.com/google/uuid
             - github.com/rabbitmq/amqp091-go
             - go.opentelemetry.io
         test:
@@ -84,6 +85,7 @@ linters:
             - $gostd
             - github.com/kasir-barati/piper-tts-rest-api
             - github.com/go-chi/chi
+            - github.com/google/uuid
             - github.com/rabbitmq/amqp091-go
             - go.opentelemetry.io
             - github.com/stretchr/testify

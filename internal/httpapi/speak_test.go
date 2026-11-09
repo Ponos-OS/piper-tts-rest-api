@@ -66,7 +66,9 @@ func newSpeakServer(t *testing.T, piperBody string, opts httpapi.Options) (*http
 
 	logs := &syncBuffer{}
 	logger := logging.New(config.Log{Mode: config.LogModeJSON, Level: config.LogLevelInfo}, "svc", logs)
-	srv := httptest.NewServer(httpapi.NewRouter(logger, synth, opts))
+	opts.Logger = logger
+	opts.Synthesizer = synth
+	srv := httptest.NewServer(httpapi.NewRouter(opts))
 	t.Cleanup(srv.Close)
 
 	return srv, evidence, logs
