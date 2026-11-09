@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -63,10 +64,12 @@ type caller struct {
 	uploadURLBody   string
 	uploadStatus    int
 	onUpload        http.HandlerFunc
+	onStatus        http.HandlerFunc
 
 	mu          sync.Mutex
 	urlRequests []recorded
 	uploads     []recorded
+	statuses    []recorded
 }
 
 func newCaller(t *testing.T) *caller {
@@ -76,6 +79,7 @@ func newCaller(t *testing.T) *caller {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/upload-url", c.handleUploadURL)
 	mux.HandleFunc("/file.mp3", c.handleUpload)
+	mux.HandleFunc("/status", c.handleStatus)
 	c.server = httptest.NewServer(mux)
 	t.Cleanup(c.server.Close)
 
@@ -116,6 +120,46 @@ func (c *caller) handleUpload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(c.uploadStatus)
 }
 
+func (c *caller) handleStatus(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	assert.NoError(c.t, err)
+	c.mu.Lock()
+	c.statuses = append(c.statuses, recorded{header: r.Header.Clone(), body: body})
+	c.mu.Unlock()
+
+	if c.onStatus != nil {
+		c.onStatus(w, r)
+	}
+}
+
+// statusLog lists the statuses received so far as "status" or "status:percent" or "completed:bytes".
+func (c *caller) statusLog(t *testing.T) []string {
+	t.Helper()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	log := make([]string, 0, len(c.statuses))
+	for _, r := range c.statuses {
+		var p struct {
+			Status        string `json:"status"`
+			Percent       *int   `json:"percent"`
+			FileSizeBytes *int64 `json:"fileSizeBytes"`
+		}
+		require.NoError(t, json.Unmarshal(r.body, &p))
+		entry := p.Status
+		if p.Percent != nil {
+			entry += ":" + strconv.Itoa(*p.Percent)
+		}
+		if p.FileSizeBytes != nil {
+			entry += ":" + strconv.FormatInt(*p.FileSizeBytes, 10)
+		}
+		log = append(log, entry)
+	}
+
+	return log
+}
+
 func (c *caller) uploadCount() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -125,11 +169,21 @@ func (c *caller) uploadCount() int {
 
 func testConfig() config.Synthesize {
 	return config.Synthesize{
-		GenUploadURLTimeout: 5 * time.Second,
-		UploadIdleTimeout:   5 * time.Second,
-		UploadTimeout:       10 * time.Second,
-		Callback:            config.Callback{AllowedHosts: []string{"127.0.0.1"}},
+		GenUploadURLTimeout:   5 * time.Second,
+		UploadIdleTimeout:     5 * time.Second,
+		UploadTimeout:         10 * time.Second,
+		StatusCallbackTimeout: 5 * time.Second,
+		WordsPerMinute:        150,
+		Callback:              config.Callback{AllowedHosts: []string{"127.0.0.1"}},
 	}
+}
+
+// publicOnlyConfig has no allow-list, so every non-public address is refused.
+func publicOnlyConfig() config.Synthesize {
+	cfg := testConfig()
+	cfg.Callback = config.Callback{}
+
+	return cfg
 }
 
 func newWorker(cfg config.Synthesize, synth worker.Synthesizer) *worker.Worker {
@@ -143,7 +197,7 @@ func jobMessage(t *testing.T, genUploadURL string) amqp.Message {
 
 	body, err := json.Marshal(synthesis.Job{
 		ID:      "job-1",
-		Request: synthesis.Request{Text: "Hello", GenUploadURL: genUploadURL, StatusCallbackURL: "https://client.example/status"},
+		Request: synthesis.Request{Text: "Hello", GenUploadURL: genUploadURL, StatusCallbackURL: strings.Replace(genUploadURL, "/upload-url", "/status", 1)},
 	})
 	require.NoError(t, err)
 
@@ -163,6 +217,90 @@ func TestProcess_GeneratesAndUploadsTheMP3(t *testing.T) {
 	assert.Equal(t, []byte("mp3-bytes"), api.uploads[0].body)
 	assert.Equal(t, "audio/mpeg", api.uploads[0].header.Get("Content-Type"))
 	assert.Equal(t, strconv.Itoa(len("mp3-bytes")), api.uploads[0].header.Get("Content-Length"))
+}
+
+// slowSynth produces its chunks with a pause before each but the first.
+type slowSynth struct {
+	chunks [][]byte
+	pause  time.Duration
+}
+
+func (f *slowSynth) Synthesize(context.Context, string) (io.ReadCloser, error) {
+	pr, pw := io.Pipe()
+	go func() {
+		for i, chunk := range f.chunks {
+			if i > 0 {
+				time.Sleep(f.pause)
+			}
+			if _, err := pw.Write(chunk); err != nil {
+				return
+			}
+		}
+		pw.Close() //nolint:errcheck,gosec // PipeWriter.Close always returns nil.
+	}()
+
+	return pr, nil
+}
+
+func TestProcess_ReportsEachStageToTheStatusCallback(t *testing.T) {
+	api := newCaller(t)
+	w := newWorker(testConfig(), &fakeSynth{audio: []byte("mp3-bytes")})
+
+	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"queued", "generating:0", "uploading:0", "uploading:99", "completed:9"}, api.statusLog(t))
+}
+
+func TestProcess_StatusCallbacksCarryTheIdempotencyKeyAndAuthorization(t *testing.T) {
+	api := newCaller(t)
+	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+
+	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+
+	require.NoError(t, err)
+	require.NotEmpty(t, api.statuses)
+	for _, r := range api.statuses {
+		assert.Equal(t, "job-1:2", r.header.Get("Idempotency-Key"))
+		assert.Equal(t, "Bearer token", r.header.Get("Authorization"))
+		assert.Equal(t, "application/json", r.header.Get("Content-Type"))
+	}
+}
+
+func TestProcess_GenerationProgressFollowsTheEstimatedSize(t *testing.T) {
+	api := newCaller(t)
+	// "Hello" is one word: about 6400 bytes at 150 words per minute. Both chunks together reach the estimate.
+	synth := &slowSynth{chunks: [][]byte{make([]byte, 3200), make([]byte, 3200)}, pause: 700 * time.Millisecond}
+	w := newWorker(testConfig(), synth)
+
+	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+
+	require.NoError(t, err)
+	assert.Contains(t, api.statusLog(t), "generating:99")
+}
+
+func TestProcess_StatusCallbackFailuresDoNotChangeTheJob(t *testing.T) {
+	tests := []struct {
+		name     string
+		onStatus http.HandlerFunc
+	}{
+		{"error response", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) }},
+		{"never answers", func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			api := newCaller(t)
+			api.onStatus = tt.onStatus
+			cfg := testConfig()
+			cfg.StatusCallbackTimeout = 200 * time.Millisecond
+			w := newWorker(cfg, &fakeSynth{audio: []byte("mp3-bytes")})
+
+			err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+
+			require.NoError(t, err)
+			assert.Equal(t, 1, api.uploadCount())
+		})
+	}
 }
 
 func TestProcess_AsksForTheUploadURLOncePerAttempt(t *testing.T) {
@@ -402,11 +540,7 @@ func TestProcess_RefusesCallbacksToNonPublicAddresses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := newWorker(config.Synthesize{
-				GenUploadURLTimeout: 5 * time.Second,
-				UploadIdleTimeout:   5 * time.Second,
-				UploadTimeout:       10 * time.Second,
-			}, &fakeSynth{audio: []byte("x")})
+			w := newWorker(publicOnlyConfig(), &fakeSynth{audio: []byte("x")})
 
 			err := w.Process(t.Context(), jobMessage(t, tt.url))
 
@@ -418,11 +552,7 @@ func TestProcess_RefusesCallbacksToNonPublicAddresses(t *testing.T) {
 
 func TestProcess_RefusesAPublicNameThatResolvesToALoopbackAddress(t *testing.T) {
 	api := newCaller(t)
-	w := newWorker(config.Synthesize{
-		GenUploadURLTimeout: 5 * time.Second,
-		UploadIdleTimeout:   5 * time.Second,
-		UploadTimeout:       10 * time.Second,
-	}, &fakeSynth{audio: []byte("x")})
+	w := newWorker(publicOnlyConfig(), &fakeSynth{audio: []byte("x")})
 	localhostURL := "http://localhost:" + portOf(t, api.server.URL) + "/upload-url"
 
 	err := w.Process(t.Context(), jobMessage(t, localhostURL))

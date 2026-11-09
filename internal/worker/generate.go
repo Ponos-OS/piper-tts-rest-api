@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kasir-barati/piper-tts-rest-api/internal/piper"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/synthesis"
 )
 
@@ -20,10 +21,10 @@ type audio struct {
 	size int64
 }
 
-func (w *Worker) generate(ctx context.Context, dir, text string) (audio, error) {
+func (w *Worker) generate(ctx context.Context, dir, text string, report func(percent int)) (audio, error) {
 	path := filepath.Join(dir, "audio.mp3")
 
-	size, err := w.generateInto(ctx, path, text)
+	size, err := w.generateInto(ctx, path, text, report)
 	if err != nil {
 		// We are intentionally returning empty struct instead of nil
 		return audio{}, newJobError(synthesis.CodeGenerationFailed, "Audio generation failed", err)
@@ -32,7 +33,7 @@ func (w *Worker) generate(ctx context.Context, dir, text string) (audio, error) 
 	return audio{path: path, size: size}, nil
 }
 
-func (w *Worker) generateInto(ctx context.Context, path, text string) (int64, error) {
+func (w *Worker) generateInto(ctx context.Context, path, text string, report func(percent int)) (int64, error) {
 	stream, err := w.synth.Synthesize(ctx, text)
 	if err != nil {
 		return 0, fmt.Errorf("start synthesis: %w", err)
@@ -43,7 +44,9 @@ func (w *Worker) generateInto(ctx context.Context, path, text string) (int64, er
 		return 0, errors.Join(fmt.Errorf("create %s: %w", filepath.Base(path), err), stream.Close())
 	}
 
-	size, copyErr := io.Copy(file, stream)
+	report(0)
+	out := &progressWriter{w: file, total: estimateMP3Bytes(piper.WordCount(text), w.cfg.WordsPerMinute), report: report}
+	size, copyErr := io.Copy(out, stream)
 	// Close kills what is left of piper and ffmpeg, so a failed copy never leaves them running.
 	err = errors.Join(copyErr, stream.Close(), file.Close())
 	if err != nil {

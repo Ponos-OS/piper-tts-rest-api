@@ -63,12 +63,17 @@ func (w *Worker) Process(ctx context.Context, m amqp.Message) error {
 	started := time.Now()
 	w.log.InfoContext(ctx, "Processing job", slog.String(keyJobID, job.ID), slog.Int(keyAttempt, m.Attempt), slog.Int(keyTextLen, len(job.Text)))
 
-	size, err := w.run(ctx, job, m)
+	status := w.newReporter(job, m)
+	defer status.wait()
+	status.send(ctx, synthesis.Queued(job.ID, m.Attempt))
+
+	size, err := w.run(ctx, job, m, status)
 	if err != nil {
 		w.logFailure(ctx, job.ID, m.Attempt, err)
 
 		return err
 	}
+	status.send(ctx, synthesis.Completed(job.ID, m.Attempt, size))
 
 	w.log.InfoContext(ctx, "Job uploaded", slog.String(keyJobID, job.ID), slog.Int(keyAttempt, m.Attempt),
 		slog.Int64(keySize, size), slog.Duration(keyTotal, time.Since(started)))
@@ -76,14 +81,17 @@ func (w *Worker) Process(ctx context.Context, m amqp.Message) error {
 	return nil
 }
 
-func (w *Worker) run(ctx context.Context, job synthesis.Job, m amqp.Message) (int64, error) {
+func (w *Worker) run(ctx context.Context, job synthesis.Job, m amqp.Message, status *reporter) (int64, error) {
 	dir, err := os.MkdirTemp("", "piper-tts-")
 	if err != nil {
 		return 0, newJobError(synthesis.CodeGenerationFailed, "Audio generation failed", err)
 	}
 	defer os.RemoveAll(dir) //nolint:errcheck // a leftover temp directory cannot change the outcome.
 
-	a, err := w.generate(ctx, dir, job.Text)
+	generating := newThrottle(progressInterval, func(percent int) {
+		status.progress(ctx, synthesis.Generating(job.ID, m.Attempt, percent))
+	})
+	a, err := w.generate(ctx, dir, job.Text, generating.report)
 	if err != nil {
 		return 0, err
 	}
@@ -91,7 +99,12 @@ func (w *Worker) run(ctx context.Context, job synthesis.Job, m amqp.Message) (in
 	if err != nil {
 		return 0, err
 	}
-	if err := w.upload(ctx, uploadURL, a); err != nil {
+
+	status.send(ctx, synthesis.Uploading(job.ID, m.Attempt, 0))
+	uploading := newThrottle(progressInterval, func(percent int) {
+		status.progress(ctx, synthesis.Uploading(job.ID, m.Attempt, percent))
+	})
+	if err := w.upload(ctx, uploadURL, a, uploading.report); err != nil {
 		w.log.ErrorContext(ctx, "Upload failed", slog.String(keyJobID, job.ID), slog.String(keyURL, synthesis.RedactUploadURL(uploadURL)))
 
 		return 0, err

@@ -20,15 +20,15 @@ var (
 
 // upload PUTs the MP3 to the presigned URL.
 // UploadTimeout bounds the whole call and UploadIdleTimeout the time without any bytes being sent.
-func (w *Worker) upload(ctx context.Context, uploadURL string, a audio) error {
-	if err := w.put(ctx, uploadURL, a); err != nil {
+func (w *Worker) upload(ctx context.Context, uploadURL string, a audio, report func(percent int)) error {
+	if err := w.put(ctx, uploadURL, a, report); err != nil {
 		return newJobError(synthesis.CodeUploadFailed, "MP3 upload failed", err)
 	}
 
 	return nil
 }
 
-func (w *Worker) put(ctx context.Context, uploadURL string, a audio) error {
+func (w *Worker) put(ctx context.Context, uploadURL string, a audio, report func(percent int)) error {
 	file, err := os.Open(a.path)
 	if err != nil {
 		return fmt.Errorf("open audio: %w", err)
@@ -40,7 +40,7 @@ func (w *Worker) put(ctx context.Context, uploadURL string, a audio) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	body := newIdleReader(file, w.cfg.UploadIdleTimeout, func() { cancel(errUploadIdle) })
+	body := newIdleReader(&progressReader{r: file, total: a.size, report: report}, w.cfg.UploadIdleTimeout, func() { cancel(errUploadIdle) })
 	defer body.stop()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, uploadURL, body)

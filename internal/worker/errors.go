@@ -8,6 +8,8 @@ import (
 	"github.com/kasir-barati/piper-tts-rest-api/internal/synthesis"
 )
 
+var errStatusRejected = errors.New("status callback answered with a failure")
+
 // jobError is a failed job with the code reported to the client.
 type jobError struct {
 	code    synthesis.ErrorCode
