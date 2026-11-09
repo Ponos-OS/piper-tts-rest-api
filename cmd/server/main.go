@@ -14,11 +14,13 @@ import (
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/httpapi"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
+	"github.com/kasir-barati/piper-tts-rest-api/internal/piper"
 )
 
 const (
-	keyPort = "port"
-	keyPath = "path"
+	keyPort       = "port"
+	keyPath       = "path"
+	keySampleRate = "sampleRate"
 )
 
 func main() {
@@ -46,6 +48,11 @@ func run() error {
 		stop()       // Then goroutine calls stop()
 	}()
 
+	synth, err := piper.New(ctx, cfg.PiperModelPath)
+	if err != nil {
+		return fmt.Errorf("piper: %w", err)
+	}
+
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", ":"+strconv.Itoa(cfg.Service.Port))
 	if err != nil {
@@ -54,7 +61,7 @@ func run() error {
 
 	boot := logging.Named(logger, "Bootstrap")
 	boot.InfoContext(ctx, "TTS API running", slog.Int(keyPort, cfg.Service.Port))
-	boot.InfoContext(ctx, "Piper model", slog.String(keyPath, cfg.PiperModelPath))
+	boot.InfoContext(ctx, "Piper model", slog.String(keyPath, cfg.PiperModelPath), slog.Int(keySampleRate, synth.SampleRate()))
 
 	if err := httpapi.Serve(ctx, ln, httpapi.NewRouter(logger)); err != nil {
 		return fmt.Errorf("serve: %w", err)

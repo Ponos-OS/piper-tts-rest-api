@@ -163,7 +163,7 @@ Notes for review:
 - Parity: `/health` is not logged; unknown paths and wrong methods both return `404 text/plain "Not Found"`; the request log keeps `Incoming <METHOD> <url>` / `Completed ...` with `method`, `url`, `headers`, `statusCode`, `duration` (ms). Field shapes follow Go, not Node: `headers` is Go's `http.Header` (canonical names such as `X-Request-Id`, each value a list), not Node's lower-cased `req.headers` object. The Go service is a new major version and does not need to match the TS log shape.
 - Differences: the bootstrap messages are static (`TTS API running` with a `port` attribute, `Piper model` with a `path` attribute) because `sloglint` requires static messages; the request messages stay dynamic (documented format) behind a `//nolint:sloglint`. Go keeps the `Host` header out of `r.Header`, so it is not in the logged `headers`. Secrets are redacted (the TS service logged everything): headers and query parameters whose name contains `auth`, `token`, `secret`, `key`, `password`, `passwd`, `signature`, `credential`, `session` or `cookie` are logged as `[REDACTED]`; `Authorization` keeps its scheme (`Bearer [REDACTED]`).
 - Shutdown: first SIGTERM/SIGINT stops accepting and waits for in-flight requests with no deadline (like Node's `server.close`); a second signal kills the process. `ReadHeaderTimeout` is 10s; there is no read/write timeout because `/speak` streams. Decided: no in-process drain deadline; the orchestrator force-kills a stuck container, and this is documented in `.github/docs/scaling.md` (Shutdown and stuck requests).
-- Not yet: Piper/ffmpeg verification (step 6) and AMQP/worker startup (steps 9-10) in `main`.
+- Not yet: AMQP/worker startup (steps 9-10) in `main`. Piper/ffmpeg verification was added in step 6.
 
 ### 5. Small utilities
 
@@ -183,6 +183,10 @@ Notes for review:
 - Learn: `os/exec` (`CommandContext`, `StdoutPipe`, `Wait`), process groups and signals on Linux, `io.Pipe`, `io.Copy`, goroutine leaks, `errgroup`.
 - Risk: this is the hardest part to get right (cancellation and cleanup). Review it closely.
 - Done when: a test with fake `piper`/`ffmpeg` scripts proves cancellation kills both and frees the slot; one real run produces a playable MP3.
+- Implemented in `internal/piper`: `New(ctx, modelPath)` is the startup check (piper `--help`, model, sidecar, `ffmpeg -version`, sample rate from `<model>.json`) and `main` calls it before listening; `(*Synthesizer).Synthesize(ctx, text)` returns a `*Stream` (an `io.ReadCloser` of MP3 bytes).
+- Design: the two pipes (piper to ffmpeg, ffmpeg to us) are `os.Pipe`s handed to the children as their stdio, so no copying goroutines run in our process. Both processes get their own process group and are killed as a group (`SIGKILL`), so nothing they spawn outlives them. One goroutine reaps both; the first failure kills the other (a crashed ffmpeg stops a CPU-bound piper). `Read` returns the failure instead of `io.EOF` when a process failed, so a truncated MP3 is never mistaken for a complete one. `Close` kills what is left and returns only after both processes are gone, which is what lets step 7 release the semaphore slot safely.
+- Differences: errors are returned (the TS code threw); stderr of both processes is discarded, as in TS; the TS `synthesizeTextToMp3Buffer` (temp files, `spawnSync`) is not ported because nothing calls it. Linux/Unix only (process groups).
+- Tests: fake `piper`/`ffmpeg` shell scripts on `PATH` check the arguments, the data flow, piper and ffmpeg failures, context cancellation, early `Close`, and that a grandchild process dies too (removing the group kill makes them fail). `real_integration_test.go` (`-tags integration`, needs `PIPER_MODEL`) ran the real piper and ffmpeg in a throwaway Docker image: 3.1 s of mono 22050 Hz MP3, confirmed with `ffprobe`.
 
 ### 7. `POST /speak`
 
