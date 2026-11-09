@@ -38,6 +38,10 @@ printf 'pcm:%s' "$text"
 `
 )
 
+// Piper prints some audio, waits until ffmpeg has relayed it, then fails.
+// Failing at once would kill ffmpeg (the first failure stops the other process) before it relays anything.
+const partialThenFailingPiper = "cat >/dev/null\nprintf partial\nsleep 0.5\nexit 1\n"
+
 type speakResult struct {
 	status int
 	body   string
@@ -249,7 +253,7 @@ func TestSpeak_PiperFailingBeforeAnyAudioIs500(t *testing.T) {
 }
 
 func TestSpeak_FailureAfterAudioStartedAbortsTheConnection(t *testing.T) {
-	srv, _, logs := newSpeakServer(t, "cat >/dev/null\nprintf partial\nexit 1\n", defaultOpts())
+	srv, _, logs := newSpeakServer(t, partialThenFailingPiper, defaultOpts())
 
 	got := speak(t.Context(), srv, `{"text":"hello"}`)
 

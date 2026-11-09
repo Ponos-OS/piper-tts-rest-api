@@ -22,7 +22,7 @@ Each step is small enough to review and study on its own, and ends with somethin
 
 Decided:
 
-- Layout: `go.mod` at the repo root, `cmd/server` and `internal/{config,logging,httpapi,piper,synthesis,amqp,worker}`. No `src/`, no `pkg/`.
+- Layout: `go.mod` at the repo root, `cmd/server` and `internal/{config,logging,redact,httpapi,piper,synthesis,amqp,worker}`. No `src/`, no `pkg/`.
 - Router: `github.com/go-chi/chi`. Its middleware is plain `func(http.Handler) http.Handler`, so it composes with `otelhttp` and stdlib tests.
 - Logging: stdlib `log/slog` with a small internal package (`internal/logging`), not a third-party logger. See [Logging and OpenTelemetry](#logging-and-opentelemetry).
 - Telemetry: official OpenTelemetry Go SDK with OTLP HTTP exporters.
@@ -207,6 +207,13 @@ Notes for review:
 - Goal: request struct, validation (text, `genUploadUrl`, `statusCallbackUrl`, HTTPS rule, allowed hosts, no URL credentials or fragments), job event types with the exact status names and fields.
 - Learn: JSON struct tags, `encoding/json`, `net/url`, custom `error` types and `errors.Is`/`errors.As`, enums via typed constants.
 - Done when: field names and status values match the TS code and the docs verbatim.
+- Implemented in `internal/synthesis`:
+  - `Request{Text, GenUploadURL, StatusCallbackURL}` (JSON `text`, `genUploadUrl`, `statusCallbackUrl`) carries `required,notblank` tags, so `decodeJSON[synthesis.Request]` in step 9 handles the shape. `Request.Normalize(config.Callback)` trims and checks the rules that need configuration (absolute URL, `http`/`https`, HTTPS when required, no user info, no fragment, host allow-list) and returns the normalized request. It reports every broken URL as a `*ValidationError` of `{field, rule}` violations (rules `absolute`, `scheme`, `https`, `credentials`, `fragment`, `host`), the same shape as body validation errors, so step 9 answers 400 with `fields`. The TS code stopped at the first error and used free-text messages.
+  - `StatusPayload` with constructors `Queued`, `Generating`, `Uploading`, `Completed`, `Failed`: a single struct whose constructors set only the fields their status has (a Go replacement for the TS union type). Status names, field names and `failedAt`/`error{code,message}` are the documented ones. `percent` is clamped to 0-99 and is a pointer so `0` is still sent. `failedAt` is a UTC `time.Time` (RFC 3339).
+  - `internal/redact` (new package, shared by `httpapi` and `synthesis`): `IsSensitive(name)` and `Query(rawQuery)`. Matching is by exact name from one list (case-insensitive, `_` equals `-`), decided over substring matching because substrings hide harmless values such as `public_key` that help when debugging. The price is that a secret under an unlisted name is logged, so extend the list in `redact.go` when one turns up. Deferred: letting operators add names at runtime (for example `LOGGING_REDACT_NAMES`). `httpapi` uses them for headers and the logged request URL; they replaced `isSensitive` and the query loop that lived in `httpapi/redact.go`.
+  - `synthesis.RedactUploadURL` for logging presigned URLs: `scheme://host/path` plus the query through `redact.Query`, so signature, credential and token parameters are hidden and the rest (`X-Amz-Expires`, `X-Amz-Date`, ...) stays visible for debugging, as in TS. User info and the fragment are dropped. Differences from TS: the list also has `AWSAccessKeyId` and `signature` (S3 v2) and the shared header and token names, and `se`/`sr` (Azure expiry and resource) are not redacted. A URL that cannot be parsed is returned as is, on purpose (decided: the operator needs to see what the caller sent in production), so it can leak a signature; the `APIs.md` sentence about the redaction-failure path stays accurate.
+- Differences: only the job failure codes are ported (`invalid-job-message`, `generation-failed`, `upload-url-failed`, `upload-failed`); `invalid-request`, `invalid-callback-url` and `request-body-too-large` were HTTP error codes of TS and are replaced by the `{error, fields}` response. `SynthesizeJobHeader`/`SynthesizeJobMessage` belong to the AMQP message and come in step 9.
+- Deferred: `SynthesizeJobEvent`. Nothing consumes it before step 10, and in Go the natural form is slog attributes at the log call, so it is decided there.
 
 ### 9. AMQP topology and publisher
 
@@ -221,6 +228,7 @@ Notes for review:
 - Goal: consume with `prefetch=1`, call `genUploadUrl`, run the pipeline, stream the MP3 to the presigned URL with idle and absolute timeouts, send status callbacks with `Idempotency-Key: <jobId>:<attempt>`, ack after terminal outcome.
 - Learn: consumer loops, `context` propagation, `io.Pipe` for streaming upload, `http.NewRequestWithContext`, progress estimation from `SYNTHESIZE_WORDS_PER_MINUTE`.
 - Note: split this into two reviews (generate+upload first, callbacks second) because of its size.
+- Outbound destinations (SSRF), decided after an automated security review: `SYNTHESIZE_CALLBACK_ALLOWED_HOSTS` stays optional (empty still means any host, as documented). Whatever it says, the HTTP client used for `genUploadUrl`, the status callbacks and the upload refuses to connect to loopback, private, link-local (this includes the cloud metadata address 169.254.169.254), unspecified and multicast IPs. The check runs on the IP actually dialed (`net.Dialer.Control`), so a hostname that resolves to a private address or redirects to one is blocked too, and redirects are not followed. It is relaxed only when `APP_ENV` is `development` or `test` (localhost callbacks, Compose, tests); it follows `Service.Env` like `RequireHTTPS` does, so no new environment variable. Document it in `config.md` and `APIs.md` (step 13).
 - Done when: the happy path e2e test passes.
 
 ### 11. Worker: retries, DLQ, failure semantics
