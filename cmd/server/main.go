@@ -3,7 +3,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -16,6 +18,7 @@ import (
 	"github.com/kasir-barati/piper-tts-rest-api/internal/httpapi"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/piper"
+	"github.com/kasir-barati/piper-tts-rest-api/internal/worker"
 )
 
 const (
@@ -75,7 +78,12 @@ func run() error {
 	boot.InfoContext(ctx, "TTS API running", slog.Int(keyPort, cfg.Service.Port))
 	boot.InfoContext(ctx, "Piper model", slog.String(keyPath, cfg.PiperModelPath), slog.Int(keySampleRate, synth.SampleRate()))
 
-	if err := httpapi.Serve(ctx, ln, httpapi.NewRouter(httpapi.Options{
+	consumed, err := startWorker(ctx, stop, cfg.Synthesize, logger, synth)
+	if err != nil {
+		return err
+	}
+
+	serveErr := httpapi.Serve(ctx, ln, httpapi.NewRouter(httpapi.Options{
 		Logger:           logger,
 		Synthesizer:      synth,
 		Jobs:             broker,
@@ -85,9 +93,50 @@ func run() error {
 			MaxBodySizeBytes: cfg.Synthesize.MaxBodySizeBytes,
 			Callback:         cfg.Synthesize.Callback,
 		},
-	})); err != nil {
-		return fmt.Errorf("serve: %w", err)
+	}))
+	stop() // Guarantee the consumer is told to exit
+
+	return errors.Join(
+		wrap("serve", serveErr),
+		wrap("consume", <-consumed), // Waits on <-consumed for the consumer to finish.
+	)
+}
+
+// startWorker consumes jobs in the background and closes the consumer when it stops.
+// A consumer that stops for any reason stops the whole service (stop), so the orchestrator restarts it.
+func startWorker(ctx context.Context, stop context.CancelFunc, cfg config.Synthesize, logger *slog.Logger, synth *piper.Synthesizer) (<-chan error, error) {
+	consumer, err := amqp.NewConsumer(cfg.RabbitMQ)
+	if err != nil {
+		return nil, fmt.Errorf("amqp consumer: %w", err)
+	}
+
+	jobs := worker.New(cfg, pipeline{synth}, logger)
+	done := make(chan error, 1)
+	go func() {
+		runErr := consumer.Run(ctx, jobs.Process)
+		stop()
+		done <- errors.Join(runErr, consumer.Close())
+	}()
+
+	return done, nil
+}
+
+func wrap(what string, err error) error {
+	if err != nil {
+		return fmt.Errorf("%s: %w", what, err)
 	}
 
 	return nil
+}
+
+// pipeline adapts the synthesizer, which returns the concrete *piper.Stream, to worker.Synthesizer.
+type pipeline struct{ *piper.Synthesizer }
+
+func (p pipeline) Synthesize(ctx context.Context, text string) (io.ReadCloser, error) {
+	stream, err := p.Synthesizer.Synthesize(ctx, text)
+	if err != nil {
+		return nil, err
+	}
+
+	return stream, nil
 }

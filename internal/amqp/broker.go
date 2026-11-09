@@ -1,4 +1,4 @@
-// Package amqp talks to RabbitMQ: it declares the topology and publishes jobs.
+// Package amqp talks to RabbitMQ: it declares the topology, publishes jobs and consumes them.
 package amqp
 
 import (
@@ -23,12 +23,13 @@ const (
 )
 
 var (
-	errClosed       = errors.New("broker is closed")
-	errNotConfirmed = errors.New("broker did not confirm the message")
+	errClosed         = errors.New("broker is closed")
+	errConsumerClosed = errors.New("consumer connection closed")
+	errNotConfirmed   = errors.New("broker did not confirm the message")
 )
 
 // Broker publishes jobs to the work queue. It is safe for concurrent use.
-// All brokers share one RabbitMQ connection and one channel even if we have multiple goroutines. That's why we need mutex.
+// The mutex guards conn, pub and closed: a reconnect replaces the connection and channel, and concurrent requests must not do that twice or publish on a channel that was just closed.
 type Broker struct {
 	cfg config.RabbitMQ
 

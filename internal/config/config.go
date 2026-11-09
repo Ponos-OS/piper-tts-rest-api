@@ -126,6 +126,7 @@ type RabbitMQ struct {
 type Callback struct {
 	RequireHTTPS bool
 	// AllowedHosts is lower-cased; empty means any host is allowed.
+	// The worker connects to a listed host even when it is a private address; every other host must be public.
 	AllowedHosts []string
 }
 
