@@ -65,18 +65,18 @@ func (e *jobError) retryDelay(configured time.Duration, attempt int) time.Durati
 	return configured * time.Duration(attempt)
 }
 
-// maxRetryAfterSeconds keeps the multiplication below from overflowing.
-const maxRetryAfterSeconds = 1 << 32
+// maxRetryAfter caps what a callback server can ask for, so it cannot park a job in the work queue for years.
+const maxRetryAfter = time.Hour
 
-// parseRetryAfter reads the header as seconds or as an HTTP date; anything else gives nil.
+// parseRetryAfter reads the header as seconds or as an HTTP date, capped at maxRetryAfter; anything else gives nil.
 func parseRetryAfter(value string, now time.Time) *time.Duration {
 	if seconds, err := strconv.ParseUint(value, 10, 64); err == nil {
-		d := time.Duration(min(seconds, maxRetryAfterSeconds)) * time.Second
+		d := time.Duration(min(seconds, uint64(maxRetryAfter/time.Second))) * time.Second
 
 		return &d
 	}
 	if date, err := http.ParseTime(value); err == nil {
-		d := max(0, date.Sub(now))
+		d := min(max(0, date.Sub(now)), maxRetryAfter)
 
 		return &d
 	}

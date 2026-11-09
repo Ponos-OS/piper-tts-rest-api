@@ -37,6 +37,11 @@ You can configure and setup this image using env variables.
       <td>Used in logs and OpenTelemetry <code>service.name</code>.</td>
     </tr>
     <tr>
+      <td>SERVICE_VERSION</td>
+      <td>unknown</td>
+      <td>Release version, OpenTelemetry <code>service.version</code>. The image sets it at build time.</td>
+    </tr>
+    <tr>
       <td>LOGGING_MODE</td>
       <td>PLAIN_TEXT</td>
       <td>PLAIN_TEXT or JSON.</td>
@@ -96,9 +101,9 @@ Switch voices via `PIPER_MODEL=/app/models/<voice>.onnx`.
       <td>OTLP HTTP base URL (e.g. <code>http://collector:4318</code>). The SDK appends <code>/v1/traces</code> and <code>/v1/logs</code>.</td>
     </tr>
     <tr>
-      <td>OTEL_WINSTON_DISABLE_LOG_SENDING</td>
-      <td>false</td>
-      <td>Set to <code>false</code> to send Winston records to the OpenTelemetry Logs SDK and preserve native trace-to-log links. Set to <code>true</code> only when infrastructure collects stdout/stderr into the log backend and preserves the injected <code>trace_id</code>.</td>
+      <td>OTEL_LOG_SHIPPING</td>
+      <td>otlp</td>
+      <td><code>otlp</code> sends every log record to the collector through OTLP and preserves native trace-to-log links. <code>stdout</code> keeps logs on stdout only; use it when infrastructure collects stdout/stderr into the log backend and preserves the <code>trace_id</code> field. Ignored when <code>OTEL_ENABLED</code> is not <code>true</code>.</td>
     </tr>
     <tr>
       <td>OTEL_TRACES_SAMPLER</td>
@@ -130,6 +135,26 @@ Switch voices via `PIPER_MODEL=/app/models/<voice>.onnx`.
       <td>30000</td>
       <td>Export deadline.</td>
     </tr>
+    <tr>
+      <td>OTEL_LOGS_BATCH_MAX_PENDING</td>
+      <td>2048</td>
+      <td>Max queued log records before dropping.</td>
+    </tr>
+    <tr>
+      <td>OTEL_LOGS_BATCH_PER_EXPORT</td>
+      <td>512</td>
+      <td>Log records per export.</td>
+    </tr>
+    <tr>
+      <td>OTEL_LOGS_BATCH_FLUSH_INTERVAL_MS</td>
+      <td>5000</td>
+      <td>Log flush interval.</td>
+    </tr>
+    <tr>
+      <td>OTEL_LOGS_BATCH_EXPORT_TIMEOUT_MS</td>
+      <td>30000</td>
+      <td>Log export deadline.</td>
+    </tr>
   </tbody>
 </table>
 
@@ -137,7 +162,7 @@ In production point `OTEL_EXPORTER_OTLP_ENDPOINT` to your own collector and set 
 
 The local Compose stack sends traces to Tempo and logs to Loki. Open Grafana at [http://localhost:3001](http://localhost:3001) and sign in with `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` (both default to `admin`). The provisioned **Observability / Piper TTS Observability** dashboard shows recent traces and logs. Opening a trace in Tempo provides a trace-to-logs link that queries Loki by trace ID. Local Grafana, Tempo, and Loki data is transient.
 
-Keep `OTEL_WINSTON_DISABLE_LOG_SENDING=false` unless a platform-level log collector sends the application's stdout/stderr to Loki. With the default, logs travel directly from Winston through OTLP to Loki and retain native trace context. With `true`, the application still writes trace-correlated fields to stdout, but the infrastructure must parse and preserve `trace_id` when it sends those logs to Loki; otherwise Grafana cannot find logs for a trace.
+Keep `OTEL_LOG_SHIPPING=otlp` unless a platform-level log collector sends the application's stdout/stderr to Loki. With the default, logs travel directly from the service through OTLP to Loki and retain native trace context. With `stdout`, the service still writes `trace_id`, `span_id` and `trace_flags` to stdout, but the infrastructure must parse and preserve `trace_id` when it sends those logs to Loki; otherwise Grafana cannot find logs for a trace.
 
 ### Logging
 

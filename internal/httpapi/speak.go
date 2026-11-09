@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/kasir-barati/piper-tts-rest-api/internal/piper"
 )
 
@@ -18,6 +20,9 @@ const (
 	keyJobID = "jobId"
 
 	chunkSize = 32 * 1024
+
+	// traceIDHeader lets the caller find the request's trace.
+	traceIDHeader = "x-trace-id"
 )
 
 var (
@@ -40,6 +45,10 @@ type speaker struct {
 // A client that disconnects cancels the request context, which kills piper and ffmpeg.
 func (s *speaker) handleSpeak(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		w.Header().Set(traceIDHeader, sc.TraceID().String())
+	}
 
 	if err := s.slots.acquire(ctx); err != nil {
 		return // the client left while queued.

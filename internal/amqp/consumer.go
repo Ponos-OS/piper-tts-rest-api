@@ -9,6 +9,10 @@ import (
 	"time"
 
 	amqp091 "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
@@ -166,18 +170,34 @@ func (c *Consumer) serve(ctx context.Context, handle func(context.Context, Messa
 				return
 			}
 
-			m := newMessage(d)
-			outcome := handle(ctx, m)
-			if ctx.Err() != nil {
-				return
-			}
-			if err := c.settle(ctx, d, m, outcome); err != nil {
-				c.log.ErrorContext(ctx, "Settling the job failed", slog.Any(keyError, err))
-
+			if !c.deliver(ctx, d, handle) {
 				return
 			}
 		}
 	}
+}
+
+// deliver runs the handler in a span that continues the trace of the publisher, then settles the message.
+// It returns false when serving must stop.
+func (c *Consumer) deliver(ctx context.Context, d amqp091.Delivery, handle func(context.Context, Message) Outcome) bool {
+	ctx, span := tracer().Start(otel.GetTextMapPropagator().Extract(ctx, headerCarrier(d.Headers)), "synthesize process",
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(semconv.MessagingSystemRabbitMQ, semconv.MessagingDestinationName(c.cfg.WorkQueue), semconv.MessagingMessageID(d.MessageId)))
+
+	m := newMessage(d)
+	outcome := handle(ctx, m)
+	if ctx.Err() != nil {
+		span.End()
+
+		return false
+	}
+	err := c.settle(ctx, d, m, outcome)
+	if err != nil {
+		c.log.ErrorContext(ctx, "Settling the job failed", slog.Any(keyError, err))
+	}
+	endSpan(span, err)
+
+	return err == nil
 }
 
 // reconnect retries with a growing pause (the first attempt is immediate). It returns false when ctx ended first.
@@ -327,4 +347,38 @@ func wrapSettle(err error) error {
 	}
 
 	return nil
+}
+
+func tracer() trace.Tracer {
+	return otel.Tracer("github.com/kasir-barati/piper-tts-rest-api/internal/amqp")
+}
+
+func endSpan(span trace.Span, err error) {
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed")
+	}
+	span.End()
+}
+
+// headerCarrier lets the trace propagator read and write the headers of a message.
+type headerCarrier amqp091.Table
+
+func (c headerCarrier) Get(key string) string {
+	if v, ok := c[key].(string); ok {
+		return v
+	}
+
+	return ""
+}
+
+func (c headerCarrier) Set(key, value string) { c[key] = value }
+
+func (c headerCarrier) Keys() []string {
+	keys := make([]string, 0, len(c))
+	for k := range c {
+		keys = append(keys, k)
+	}
+
+	return keys
 }

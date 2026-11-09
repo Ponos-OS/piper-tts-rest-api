@@ -12,12 +12,14 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/amqp"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/httpapi"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/piper"
+	"github.com/kasir-barati/piper-tts-rest-api/internal/telemetry"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/worker"
 )
 
@@ -26,6 +28,8 @@ const (
 	keyPath       = "path"
 	keySampleRate = "sampleRate"
 	keyError      = "error"
+
+	telemetryFlushTimeout = 10 * time.Second
 )
 
 func main() {
@@ -41,7 +45,6 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	logger := logging.New(cfg.Log, cfg.Service.Name, os.Stdout)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 
 	// First SIGTERM/SIGINT makes httpapi.Serve start the graceful shutdown.
@@ -52,6 +55,12 @@ func run() error {
 		<-ctx.Done() // The goroutine waits for the first signal
 		stop()       // Then goroutine calls stop()
 	}()
+
+	logger, stopTelemetry, err := startTelemetry(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer stopTelemetry() // Runs last, so the spans and logs of the shutdown are flushed too.
 
 	synth, err := piper.New(ctx, cfg.PiperModelPath)
 	if err != nil {
@@ -118,6 +127,25 @@ func startWorker(ctx context.Context, cfg config.Synthesize, logger *slog.Logger
 	}()
 
 	return done, nil
+}
+
+// startTelemetry starts OpenTelemetry and builds the logger, which ships its records when OTEL_LOG_SHIPPING asks for it.
+// The returned function flushes what is still queued.
+func startTelemetry(ctx context.Context, cfg config.Config) (*slog.Logger, func(), error) {
+	tel, err := telemetry.Setup(ctx, cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("telemetry: %w", err)
+	}
+	logger := logging.New(cfg.Log, cfg.Service.Name, os.Stdout, tel.LogHandler())
+
+	return logger, func() {
+		flush, cancel := context.WithTimeout(context.WithoutCancel(ctx), telemetryFlushTimeout)
+		defer cancel()
+
+		if shutdownErr := tel.Shutdown(flush); shutdownErr != nil {
+			logging.Named(logger, "Bootstrap").ErrorContext(flush, "Flushing telemetry failed", slog.String(keyError, shutdownErr.Error()))
+		}
+	}, nil
 }
 
 func wrap(what string, err error) error {

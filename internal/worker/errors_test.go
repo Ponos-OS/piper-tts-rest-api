@@ -47,7 +47,8 @@ func TestParseRetryAfter(t *testing.T) {
 		{"missing", "", nil},
 		{"not a number or a date", "soon", nil},
 		{"negative", "-5", nil},
-		{"absurdly large values do not overflow", "99999999999999999", seconds(1 << 32)},
+		{"a huge number of seconds is capped", "99999999999999999", seconds(3600)},
+		{"a far future date is capped", "Wed, 21 Oct 2099 07:28:00 GMT", seconds(3600)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

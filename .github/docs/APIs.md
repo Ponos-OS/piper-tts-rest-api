@@ -27,6 +27,7 @@ The PCM sample rate is read once at process startup from the model's `.onnx.json
   - `Content-Type: audio/mpeg`.
   - `Content-Disposition: inline; filename="<generated>.mp3"`.
   - `Cache-Control: no-store`.
+  - `x-trace-id: <trace id>` when `OTEL_ENABLED=true`.
   - `Transfer-Encoding: chunked`.
   - `Body`: MP3 audio stream, read until the stream ends.
 - Errors:
@@ -165,7 +166,7 @@ stateDiagram-v2
   completed --> [*]
 ```
 
-A retry is republished to the work queue with the `x-opt-delivery-time` header (RabbitMQ 4.4 or newer; older brokers ignore it and redeliver at once). Delayed messages do not block each other. The delay is the `Retry-After` of a 429 response, otherwise `SYNTHESIZE_RETRY_DELAY_MS` times the number of the failed attempt.
+A retry is republished to the work queue with the `x-opt-delivery-time` header (RabbitMQ 4.4 or newer; older brokers ignore it and redeliver at once). Delayed messages do not block each other. The delay is the `Retry-After` of a 429 response (at most one hour), otherwise `SYNTHESIZE_RETRY_DELAY_MS` times the number of the failed attempt.
 
 You must use HTTPS callback endpoints in production. URL credentials and fragments are rejected. Set `SYNTHESIZE_CALLBACK_ALLOWED_HOSTS` to the exact client hostnames allowed to receive callbacks; an empty value permits any valid HTTP(S) hostname.
 

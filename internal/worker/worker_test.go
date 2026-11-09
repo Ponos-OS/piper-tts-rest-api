@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +18,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/amqp"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
@@ -769,4 +776,40 @@ func TestProcess_TheFailedStatusCarriesTheTimeAndTheError(t *testing.T) {
 	assert.Equal(t, "HTTP 400", failed.Error.Message)
 	assert.WithinRange(t, failed.FailedAt, before, time.Now().Add(time.Second))
 	assert.Equal(t, time.UTC, failed.FailedAt.Location())
+}
+
+func TestProcess_PassesTheTraceOnToEveryCallAsClientSpans(t *testing.T) {
+	spans := tracetest.NewSpanRecorder()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)))
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		otel.SetTracerProvider(noop.NewTracerProvider())
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator())
+	})
+	api := newCaller(t)
+	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+	ctx, parent := otel.Tracer("test").Start(t.Context(), "parent")
+
+	got := w.Process(ctx, jobMessage(t, api.server.URL+"/upload-url"))
+	parent.End()
+
+	require.Equal(t, amqp.Ack(), got)
+	traceID := parent.SpanContext().TraceID().String()
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	sent := slices.Concat(api.urlRequests, api.statuses, api.uploads)
+	require.NotEmpty(t, sent)
+	for _, r := range sent {
+		assert.Contains(t, r.header.Get("traceparent"), traceID)
+	}
+	clients := 0
+	for _, span := range spans.Ended() {
+		if span.SpanKind() != oteltrace.SpanKindClient {
+			continue
+		}
+		clients++
+		assert.Equal(t, traceID, span.SpanContext().TraceID().String())
+		assert.NotContains(t, span.Name(), "secret")
+	}
+	assert.Len(t, sent, clients, "one client span per call")
 }

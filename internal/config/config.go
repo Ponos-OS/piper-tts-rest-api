@@ -47,6 +47,7 @@ const (
 	defaultBatchFlushInterval  = 5 * time.Second
 	defaultBatchExportTimeout  = 30 * time.Second
 	defaultServiceName         = "piper-tts-rest-api"
+	defaultServiceVersion      = "unknown"
 	defaultPiperModelPath      = "/app/models/en_US-lessac-medium.onnx"
 	defaultRabbitMQURL         = "amqp://localhost:5672"
 	defaultEnvironment         = "production"
@@ -77,6 +78,8 @@ type Config struct {
 type Service struct {
 	Port int
 	Name string
+	// Version is the release, set in the image; reported as service.version.
+	Version string
 	// Env is production, development or test; the latter two relax the HTTPS callback rule.
 	Env string
 }
@@ -157,9 +160,10 @@ func Load(lookup func(key string) (string, bool)) (Config, error) {
 	l := &loader{lookup: lookup}
 
 	service := Service{
-		Port: l.positiveInt("PORT", defaultPort),
-		Name: l.str("SERVICE_NAME", defaultServiceName),
-		Env:  l.str("APP_ENV", defaultEnvironment),
+		Port:    l.positiveInt("PORT", defaultPort),
+		Name:    l.str("SERVICE_NAME", defaultServiceName),
+		Version: l.str("SERVICE_VERSION", defaultServiceVersion),
+		Env:     l.str("APP_ENV", defaultEnvironment),
 	}
 
 	cfg := Config{

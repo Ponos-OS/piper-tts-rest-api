@@ -15,6 +15,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/httpapi"
@@ -212,4 +217,58 @@ func fetch(ctx context.Context, url string) fetched {
 	_, drainErr := io.Copy(io.Discard, resp.Body)
 
 	return fetched{status: resp.StatusCode, err: errors.Join(drainErr, resp.Body.Close())}
+}
+
+const (
+	traceID     = "4bf92f3577b34da6a3ce929d0e0e4736"
+	traceparent = "00-" + traceID + "-00f067aa0ba902b7-01"
+)
+
+// recordSpans turns tracing on for the test; build the router after calling it.
+func recordSpans(t *testing.T) *tracetest.SpanRecorder {
+	t.Helper()
+
+	recorder := tracetest.NewSpanRecorder()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		// The default provider delegates to the first one set, so it cannot be restored; the noop one is what a disabled service has.
+		otel.SetTracerProvider(noop.NewTracerProvider())
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator())
+	})
+
+	return recorder
+}
+
+func TestTracing_ARequestGetsASpanNamedAfterItsRouteInTheCallersTrace(t *testing.T) {
+	spans := recordSpans(t)
+	router := newSynthesizeRouter(&fakePublisher{}, config.Callback{}, 1000)
+
+	rec := postSynthesize(t, router, `{}`, map[string]string{"traceparent": traceparent})
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	ended := spans.Ended()
+	require.Len(t, ended, 1)
+	assert.Equal(t, "POST /synthesize", ended[0].Name())
+	assert.Equal(t, traceID, ended[0].SpanContext().TraceID().String())
+}
+
+func TestTracing_RequestLogsCarryTheTraceID(t *testing.T) {
+	recordSpans(t)
+	router, out := newRouter()
+
+	do(t, router, http.MethodPost, "/nowhere", map[string]string{"traceparent": traceparent})
+
+	for _, line := range logLines(t, out) {
+		assert.Equal(t, traceID, line["trace_id"])
+	}
+}
+
+func TestTracing_HealthChecksAreNotTraced(t *testing.T) {
+	spans := recordSpans(t)
+	router, _ := newRouter()
+
+	do(t, router, http.MethodGet, "/health", nil)
+
+	assert.Empty(t, spans.Ended())
 }

@@ -10,6 +10,9 @@ import (
 	"time"
 
 	amqp091 "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/synthesis"
@@ -51,13 +54,21 @@ func Connect(cfg config.RabbitMQ) (*Broker, error) {
 // PublishJob enqueues job and returns once the broker confirmed it.
 // authorization is the caller's Authorization header, kept for the worker's callbacks; it is omitted when empty.
 // A lost connection is re-established on the next call.
-func (b *Broker) PublishJob(ctx context.Context, job synthesis.Job, authorization string) error {
+// The trace context travels in the message headers, so the worker's spans continue the request's trace.
+func (b *Broker) PublishJob(ctx context.Context, job synthesis.Job, authorization string) (err error) {
+	ctx, span := tracer().Start(ctx, "synthesize publish", trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(semconv.MessagingSystemRabbitMQ, semconv.MessagingDestinationName(b.cfg.Exchange), semconv.MessagingMessageID(job.ID)))
+	defer func() { endSpan(span, err) }()
+
 	body, err := json.Marshal(job)
 	if err != nil {
 		return fmt.Errorf("encode job: %w", err)
 	}
 
-	confirmation, err := b.publish(ctx, newPublishing(job.ID, body, authorization, time.Now()))
+	p := newPublishing(job.ID, body, authorization, time.Now())
+	otel.GetTextMapPropagator().Inject(ctx, headerCarrier(p.Headers))
+
+	confirmation, err := b.publish(ctx, p)
 	if err != nil {
 		return err
 	}

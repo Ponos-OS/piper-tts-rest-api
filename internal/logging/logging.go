@@ -2,9 +2,12 @@
 package logging
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"strings"
+
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
 )
@@ -13,6 +16,10 @@ import (
 const (
 	keyService = "service"
 	keyContext = "context"
+
+	keyTraceID    = "trace_id"
+	keySpanID     = "span_id"
+	keyTraceFlags = "trace_flags"
 )
 
 // LevelVerbose sits between info and debug
@@ -28,18 +35,54 @@ const timestampLayout = "2006-01-02T15:04:05.000Z"
 
 // New creates a logger that writes to out (e.g. os.Stdout).
 // cfg selects the format (JSON or PLAIN_TEXT) and the minimum level.
-// Service is added to every record.
-func New(cfg config.Log, service string, out io.Writer) *slog.Logger {
+// Service is added to every record written to out.
+// Records also go to each non-nil handler in also (the OTLP log shipper); those get the service name from their own resource.
+// The records written to out carry trace_id, span_id and trace_flags when the context has a span.
+func New(cfg config.Log, service string, out io.Writer, also ...slog.Handler) *slog.Logger {
 	level := parseLevel(cfg.Level)
 
+	var stdout slog.Handler
 	if cfg.Mode == config.LogModeJSON {
-		handler := slog.NewJSONHandler(out, &slog.HandlerOptions{Level: level, ReplaceAttr: renameBuiltins})
-
-		return slog.New(handler).With(slog.String(keyService, service))
+		stdout = slog.NewJSONHandler(out, &slog.HandlerOptions{Level: level, ReplaceAttr: renameBuiltins}).
+			WithAttrs([]slog.Attr{slog.String(keyService, service)})
+	} else {
+		stdout = newPlainHandler(out, level, service)
 	}
 
-	// Ensures newPlainHandler/plainHandler implements slog.Handler at compile time
-	return slog.New(newPlainHandler(out, level, service))
+	handlers := []slog.Handler{traceHandler{stdout}}
+	for _, h := range also {
+		if h != nil {
+			handlers = append(handlers, h)
+		}
+	}
+	if len(handlers) == 1 {
+		return slog.New(handlers[0])
+	}
+
+	return slog.New(slog.NewMultiHandler(handlers...))
+}
+
+// traceHandler adds the trace context of the record's context.
+type traceHandler struct{ slog.Handler }
+
+func (h traceHandler) Handle(ctx context.Context, r slog.Record) error {
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		r.AddAttrs(
+			slog.String(keyTraceID, sc.TraceID().String()),
+			slog.String(keySpanID, sc.SpanID().String()),
+			slog.String(keyTraceFlags, sc.TraceFlags().String()),
+		)
+	}
+
+	return h.Handler.Handle(ctx, r) //nolint:wrapcheck // it is the wrapped handler's own result.
+}
+
+func (h traceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return traceHandler{h.Handler.WithAttrs(attrs)}
+}
+
+func (h traceHandler) WithGroup(name string) slog.Handler {
+	return traceHandler{h.Handler.WithGroup(name)}
 }
 
 // Named returns a logger that tags every record with a context name.

@@ -14,6 +14,12 @@ import (
 	amqp091 "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
@@ -272,4 +278,43 @@ func unbindWorkQueue(t *testing.T, cfg config.RabbitMQ) {
 	ch, err := conn.Channel()
 	require.NoError(t, err)
 	require.NoError(t, ch.QueueUnbind(cfg.WorkQueue, synthesis.RoutingKey, cfg.Exchange, nil))
+}
+
+func TestConsumer_ContinuesThePublishersTraceAndKeepsItOnRetry(t *testing.T) {
+	spans := tracetest.NewSpanRecorder()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)))
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		otel.SetTracerProvider(noop.NewTracerProvider())
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator())
+	})
+	cfg, _ := startRabbit(t)
+	ctx, request := otel.Tracer("test").Start(t.Context(), "request")
+	job := synthesis.Job{ID: uuid.NewString(), Request: synthesis.Request{Text: "Hello", GenUploadURL: "https://a.example/u", StatusCallbackURL: "https://a.example/s"}}
+	require.NoError(t, connect(t, cfg).PublishJob(ctx, job, ""))
+	request.End()
+	traceIDs := make(chan trace.TraceID, 2)
+
+	stop := consume(t, cfg, func(ctx context.Context, m Message) Outcome {
+		traceIDs <- trace.SpanContextFromContext(ctx).TraceID()
+		if m.Attempt == 1 {
+			return Retry(0)
+		}
+
+		return Ack()
+	})
+	first, second := <-traceIDs, <-traceIDs
+	stop()
+
+	want := request.SpanContext().TraceID()
+	assert.Equal(t, want, first)
+	assert.Equal(t, want, second)
+	var names []string // testcontainers traces its Docker calls into the same provider, so only ours are looked at.
+	for _, span := range spans.Ended() {
+		if span.SpanKind() == trace.SpanKindProducer || span.SpanKind() == trace.SpanKindConsumer {
+			assert.Equal(t, want, span.SpanContext().TraceID(), span.Name())
+			names = append(names, span.Name())
+		}
+	}
+	assert.ElementsMatch(t, []string{"synthesize publish", "synthesize process", "synthesize process"}, names)
 }

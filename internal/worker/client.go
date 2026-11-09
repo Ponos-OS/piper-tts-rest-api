@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -24,6 +26,7 @@ var errBlockedAddress = errors.New("connection to a non-public address is not al
 // newClient returns the HTTP client for every call to a caller-supplied URL.
 // It refuses to connect to addresses that are not on the public internet, except for hosts the operator listed in allowedHosts.
 // It follows no redirects: a 3xx response is returned as is and counts as a failure.
+// Each call is a client span and carries the trace context; the telemetry setup strips the query from the recorded URL.
 // It uses no proxy, because the check runs on the address that is dialed and a proxy would be that address.
 func newClient(allowedHosts []string) *http.Client {
 	public := &net.Dialer{Timeout: dialTimeout, Control: refuseNonPublic}
@@ -38,13 +41,13 @@ func newClient(allowedHosts []string) *http.Client {
 	}
 
 	return &http.Client{
-		Transport: &http.Transport{
+		Transport: otelhttp.NewTransport(&http.Transport{
 			DialContext:         dial,
 			ForceAttemptHTTP2:   true,
 			TLSHandshakeTimeout: dialTimeout,
 			IdleConnTimeout:     idleConnTimeout,
 			MaxIdleConns:        maxIdleConns,
-		},
+		}),
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 }

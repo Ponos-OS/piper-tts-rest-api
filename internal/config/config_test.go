@@ -23,7 +23,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, config.Config{
-		Service:          config.Service{Port: 3000, Name: "piper-tts-rest-api", Env: "production"},
+		Service:          config.Service{Port: 3000, Name: "piper-tts-rest-api", Version: "unknown", Env: "production"},
 		MaxConcurrency:   10,
 		PiperModelPath:   "/app/models/en_US-lessac-medium.onnx",
 		MaxBodySizeBytes: 500_000,
@@ -58,6 +58,7 @@ func TestLoad_ReadsEveryVariable(t *testing.T) {
 	env := map[string]string{
 		"PORT":                                  "8080",
 		"SERVICE_NAME":                          "tts",
+		"SERVICE_VERSION":                       "4.1.0",
 		"APP_ENV":                               "staging",
 		"MAX_CONCURRENCY":                       "4",
 		"PIPER_MODEL":                           "/m/voice.onnx",
@@ -96,7 +97,7 @@ func TestLoad_ReadsEveryVariable(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, config.Config{
-		Service:          config.Service{Port: 8080, Name: "tts", Env: "staging"},
+		Service:          config.Service{Port: 8080, Name: "tts", Version: "4.1.0", Env: "staging"},
 		MaxConcurrency:   4,
 		PiperModelPath:   "/m/voice.onnx",
 		MaxBodySizeBytes: 1000,

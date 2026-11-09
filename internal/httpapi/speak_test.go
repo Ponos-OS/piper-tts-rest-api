@@ -188,6 +188,31 @@ func TestSpeak_StreamsMP3WithHeaders(t *testing.T) {
 	assert.False(t, done.Aborted)
 }
 
+func TestSpeak_EchoesTheTraceIDWhenTracingIsOn(t *testing.T) {
+	recordSpans(t)
+	srv, _, _ := newSpeakServer(t, echoPiper, defaultOpts())
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/speak", strings.NewReader(`{"text":"hello"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("traceparent", traceparent)
+
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, resp.Body.Close()) })
+
+	assert.Equal(t, traceID, resp.Header.Get("x-trace-id"))
+}
+
+func TestSpeak_HasNoTraceIDHeaderWhenTracingIsOff(t *testing.T) {
+	srv, _, _ := newSpeakServer(t, echoPiper, defaultOpts())
+
+	resp, err := postSpeak(t.Context(), srv, `{"text":"hello"}`)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, resp.Body.Close()) })
+
+	assert.Empty(t, resp.Header.Get("x-trace-id"))
+}
+
 func TestSpeak_TrimsText(t *testing.T) {
 	srv, _, _ := newSpeakServer(t, echoPiper, defaultOpts())
 

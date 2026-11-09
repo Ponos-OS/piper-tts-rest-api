@@ -2,9 +2,12 @@ package logging_test
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -156,4 +159,80 @@ func TestNew_LevelFiltering(t *testing.T) {
 			}
 		})
 	}
+}
+
+func spanContext(t *testing.T) context.Context {
+	t.Helper()
+
+	traceID, err := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
+	require.NoError(t, err)
+	spanID, err := trace.SpanIDFromHex("00f067aa0ba902b7")
+	require.NoError(t, err)
+
+	return trace.ContextWithSpanContext(t.Context(), trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled,
+	}))
+}
+
+func TestNew_AddsTheTraceContextOfASpan(t *testing.T) {
+	for _, mode := range []string{config.LogModeJSON, config.LogModePlainText} {
+		t.Run(mode, func(t *testing.T) {
+			l, out := newLogger(mode, "info")
+
+			r := slog.NewRecord(fixedTime, slog.LevelInfo, "msg", 0)
+			require.NoError(t, l.Handler().Handle(spanContext(t), r))
+
+			assert.Contains(t, out.String(), `"trace_id":"4bf92f3577b34da6a3ce929d0e0e4736"`)
+			assert.Contains(t, out.String(), `"span_id":"00f067aa0ba902b7"`)
+			assert.Contains(t, out.String(), `"trace_flags":"01"`)
+		})
+	}
+}
+
+func TestNew_LeavesOutTheTraceContextWithoutASpan(t *testing.T) {
+	l, out := newLogger(config.LogModeJSON, "info")
+
+	emit(t, l, slog.LevelInfo, "msg")
+
+	assert.NotContains(t, out.String(), "trace_id")
+}
+
+// recorder is a handler that keeps what it receives; derived handlers share the same store.
+type recorder struct {
+	store *received
+}
+
+type received struct {
+	messages []string
+	attrs    []string
+}
+
+func (recorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h recorder) Handle(_ context.Context, r slog.Record) error {
+	h.store.messages = append(h.store.messages, r.Message)
+
+	return nil
+}
+
+func (h recorder) WithAttrs(attrs []slog.Attr) slog.Handler {
+	for _, a := range attrs {
+		h.store.attrs = append(h.store.attrs, a.Key)
+	}
+
+	return h
+}
+
+func (h recorder) WithGroup(string) slog.Handler { return h }
+
+func TestNew_SendsRecordsToTheExtraHandlersToo(t *testing.T) {
+	shipped := recorder{store: &received{}}
+	out := &bytes.Buffer{}
+	l := logging.New(config.Log{Mode: config.LogModeJSON, Level: "info"}, service, out, nil, shipped)
+
+	logging.Named(l, "Worker").InfoContext(t.Context(), "Processing job")
+
+	assert.Contains(t, out.String(), `"service":"piper-tts-rest-api"`)
+	assert.Equal(t, []string{"Processing job"}, shipped.store.messages)
+	assert.Equal(t, []string{"context"}, shipped.store.attrs, "the service name comes from the resource, not from an attribute")
 }

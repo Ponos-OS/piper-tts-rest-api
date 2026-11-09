@@ -6,6 +6,7 @@ import (
 
 	amqp091 "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 func TestNewMessage_ReadsAttemptAndAuthorizationFromHeaders(t *testing.T) {
@@ -60,4 +61,22 @@ func TestRetryHeaders_KeepsTheCallersHeadersDropsTheBrokersAndSetsTheAttemptAndT
 		"x-attempt":           3,
 		"x-opt-delivery-time": int64(1700000005000),
 	}, got)
+}
+
+func TestHeaderCarrier_CarriesTheTraceContextThroughMessageHeaders(t *testing.T) {
+	const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	propagator := propagation.TraceContext{}
+
+	ctx := propagator.Extract(t.Context(), headerCarrier(amqp091.Table{"traceparent": traceparent}))
+	out := amqp091.Table{}
+	propagator.Inject(ctx, headerCarrier(out))
+
+	assert.Equal(t, traceparent, out["traceparent"])
+}
+
+func TestHeaderCarrier_IgnoresHeadersThatAreNotStrings(t *testing.T) {
+	carrier := headerCarrier(amqp091.Table{"x-attempt": int32(2)})
+
+	assert.Empty(t, carrier.Get("x-attempt"))
+	assert.Equal(t, []string{"x-attempt"}, carrier.Keys())
 }
