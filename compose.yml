@@ -24,7 +24,7 @@ services:
         condition: service_completed_successfully
 
   rabbitmq:
-    image: rabbitmq:4.3-management-alpine
+    image: rabbitmq:4.4-management-alpine
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest

@@ -4,8 +4,9 @@ package amqp
 
 import (
 	"context"
-	"errors"
+	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,30 +16,41 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
+	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/synthesis"
 )
 
-var errHandler = errors.New("handler failed")
-
-// consume starts a consumer and returns a function that stops it and waits until it is gone.
-func consume(t *testing.T, cfg config.RabbitMQ, handle func(context.Context, Message) error) (stop func()) {
+// startConsumer starts a consumer and returns it with a function that stops it and waits until it is gone.
+func startConsumer(t *testing.T, cfg config.RabbitMQ, handle func(context.Context, Message) Outcome) (*Consumer, func()) {
 	t.Helper()
 
-	c, err := NewConsumer(cfg)
+	logger := logging.New(config.Log{Mode: config.LogModeJSON, Level: config.LogLevelError}, "svc", io.Discard)
+	c, err := NewConsumer(cfg, logger)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
-	go func() { done <- c.Run(ctx, handle) }()
+	done := make(chan struct{})
+	go func() {
+		c.Run(ctx, handle)
+		close(done)
+	}()
 
 	var once sync.Once
-	stop = func() {
+	stop := func() {
 		once.Do(func() {
 			cancel()
-			require.NoError(t, <-done)
+			<-done
 			require.NoError(t, c.Close())
 		})
 	}
 	t.Cleanup(stop)
+
+	return c, stop
+}
+
+func consume(t *testing.T, cfg config.RabbitMQ, handle func(context.Context, Message) Outcome) (stop func()) {
+	t.Helper()
+
+	_, stop = startConsumer(t, cfg, handle)
 
 	return stop
 }
@@ -89,10 +101,10 @@ func TestConsumer_HandsOverTheJobAndAcknowledgesIt(t *testing.T) {
 	job := publish(t, cfg, "Bearer abc")
 	messages := make(chan Message, 1)
 
-	stop := consume(t, cfg, func(_ context.Context, m Message) error {
+	stop := consume(t, cfg, func(_ context.Context, m Message) Outcome {
 		messages <- m
 
-		return nil
+		return Ack()
 	})
 	got := receive(t, messages)
 	stop()
@@ -108,7 +120,7 @@ func TestConsumer_DeadLettersAJobWhoseHandlerFailed(t *testing.T) {
 	cfg, _ := startRabbit(t)
 	publish(t, cfg, "")
 
-	consume(t, cfg, func(context.Context, Message) error { return errHandler })
+	consume(t, cfg, func(context.Context, Message) Outcome { return Reject() })
 
 	assert.Eventually(t, func() bool { return ready(t, cfg, cfg.DeadLetterQueue) == 1 }, 10*time.Second, 200*time.Millisecond)
 	assert.Zero(t, ready(t, cfg, cfg.WorkQueue))
@@ -118,20 +130,20 @@ func TestConsumer_LeavesTheJobForRedeliveryWhenShutdownInterruptsIt(t *testing.T
 	cfg, _ := startRabbit(t)
 	job := publish(t, cfg, "")
 	started := make(chan struct{}, 1)
-	stop := consume(t, cfg, func(ctx context.Context, _ Message) error {
+	stop := consume(t, cfg, func(ctx context.Context, _ Message) Outcome {
 		started <- struct{}{}
 		<-ctx.Done()
 
-		return ctx.Err()
+		return Reject() // ignored: the context is cancelled.
 	})
 	receiveSignal(t, started)
 
 	stop()
 	again := make(chan Message, 1)
-	consume(t, cfg, func(_ context.Context, m Message) error {
+	consume(t, cfg, func(_ context.Context, m Message) Outcome {
 		again <- m
 
-		return nil
+		return Ack()
 	})
 
 	assert.Contains(t, string(receive(t, again).Body), job.ID)
@@ -142,20 +154,20 @@ func TestConsumer_TakesOneJobAtATime(t *testing.T) {
 	cfg, _ := startRabbit(t)
 	first := publish(t, cfg, "")
 	started := make(chan struct{}, 1)
-	consume(t, cfg, func(ctx context.Context, _ Message) error {
+	consume(t, cfg, func(ctx context.Context, _ Message) Outcome {
 		started <- struct{}{}
 		<-ctx.Done() // never finishes the job, so the broker has to hold the next one back.
 
-		return ctx.Err()
+		return Reject() // ignored: the context is cancelled.
 	})
 	receiveSignal(t, started)
 	second := publish(t, cfg, "")
 	others := make(chan Message, 1)
 
-	consume(t, cfg, func(_ context.Context, m Message) error {
+	consume(t, cfg, func(_ context.Context, m Message) Outcome {
 		others <- m
 
-		return nil
+		return Ack()
 	})
 
 	got := receive(t, others)
@@ -171,4 +183,93 @@ func receiveSignal(t *testing.T, signal <-chan struct{}) {
 	case <-time.After(10 * time.Second):
 		require.FailNow(t, "the handler never started")
 	}
+}
+
+func TestConsumer_RetryReturnsTheJobAfterTheDelayWithTheNextAttempt(t *testing.T) {
+	cfg, _ := startRabbit(t)
+	job := publish(t, cfg, "Bearer abc")
+	const delay = 300 * time.Millisecond
+	type delivery struct {
+		m  Message
+		at time.Time
+	}
+	deliveries := make(chan delivery, 2)
+	consume(t, cfg, func(_ context.Context, m Message) Outcome {
+		deliveries <- delivery{m: m, at: time.Now()}
+		if m.Attempt == 1 {
+			return Retry(delay)
+		}
+
+		return Ack()
+	})
+
+	first := receiveDelivery(t, deliveries)
+	second := receiveDelivery(t, deliveries)
+
+	assert.Equal(t, 1, first.m.Attempt)
+	assert.Equal(t, 2, second.m.Attempt)
+	assert.Equal(t, "Bearer abc", second.m.Authorization)
+	assert.Equal(t, first.m.Body, second.m.Body)
+	assert.Contains(t, string(second.m.Body), job.ID)
+	assert.GreaterOrEqual(t, second.at.Sub(first.at), delay)
+	assert.Zero(t, ready(t, cfg, cfg.DeadLetterQueue))
+}
+
+func TestConsumer_DeadLettersTheJobWhenTheRetryCannotBePublished(t *testing.T) {
+	cfg, _ := startRabbit(t)
+	broker := connect(t, cfg)
+	var calls atomic.Int32
+	consume(t, cfg, func(context.Context, Message) Outcome {
+		calls.Add(1)
+		unbindWorkQueue(t, cfg) // the exchange now has no queue to take the retry.
+
+		return Retry(0)
+	})
+
+	require.NoError(t, broker.PublishJob(t.Context(), synthesis.Job{ID: uuid.NewString()}, ""))
+
+	assert.Eventually(t, func() bool { return ready(t, cfg, cfg.DeadLetterQueue) == 1 }, 10*time.Second, 200*time.Millisecond)
+	assert.Equal(t, int32(1), calls.Load(), "the job is not handed over again")
+	assert.Zero(t, ready(t, cfg, cfg.WorkQueue))
+}
+
+func TestConsumer_ReconnectsAfterTheConnectionDropped(t *testing.T) {
+	cfg, _ := startRabbit(t)
+	messages := make(chan Message, 2)
+	c, _ := startConsumer(t, cfg, func(_ context.Context, m Message) Outcome {
+		messages <- m
+
+		return Ack()
+	})
+	require.NoError(t, c.conn.Close())
+
+	job := publish(t, cfg, "")
+
+	assert.Contains(t, string(receive(t, messages).Body), job.ID)
+}
+
+func receiveDelivery[T any](t *testing.T, deliveries <-chan T) T {
+	t.Helper()
+
+	select {
+	case d := <-deliveries:
+		return d
+	case <-time.After(15 * time.Second):
+		require.FailNow(t, "no message was delivered")
+
+		var zero T
+
+		return zero
+	}
+}
+
+func unbindWorkQueue(t *testing.T, cfg config.RabbitMQ) {
+	t.Helper()
+
+	conn, err := amqp091.Dial(cfg.URL)
+	require.NoError(t, err)
+	defer conn.Close() //nolint:errcheck // test helper.
+	ch, err := conn.Channel()
+	require.NoError(t, err)
+	require.NoError(t, ch.QueueUnbind(cfg.WorkQueue, synthesis.RoutingKey, cfg.Exchange, nil))
 }

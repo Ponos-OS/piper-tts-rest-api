@@ -26,6 +26,9 @@ const (
 	keySize    = "fileSizeBytes"
 	keyURL     = "uploadUrl"
 	keyTotal   = "totalDuration"
+
+	keyMaxAttempts = "maxAttempts"
+	keyRetryDelay  = "retryDelay"
 )
 
 // Synthesizer turns text into an MP3 stream; the caller must close it.
@@ -51,13 +54,16 @@ func New(cfg config.Synthesize, synth Synthesizer, logger *slog.Logger) *Worker 
 	}
 }
 
-// Process runs one job. A nil result means the file is uploaded.
-func (w *Worker) Process(ctx context.Context, m amqp.Message) error {
+// Process runs one attempt of a job and says what to do with the message:
+// Ack when the file is uploaded or the job failed for a reason a retry cannot fix,
+// Retry when trying again can help and attempts are left,
+// Reject when the message is not a valid job or all attempts are used up: it is kept in the dead-letter queue.
+func (w *Worker) Process(ctx context.Context, m amqp.Message) amqp.Outcome {
 	job, err := parseJob(m.Body)
 	if err != nil {
 		w.logFailure(ctx, "", m.Attempt, err)
 
-		return err
+		return amqp.Reject()
 	}
 
 	started := time.Now()
@@ -71,14 +77,42 @@ func (w *Worker) Process(ctx context.Context, m amqp.Message) error {
 	if err != nil {
 		w.logFailure(ctx, job.ID, m.Attempt, err)
 
-		return err
+		return w.afterFailure(ctx, job, m, status, err)
 	}
 	status.send(ctx, synthesis.Completed(job.ID, m.Attempt, size))
 
 	w.log.InfoContext(ctx, "Job uploaded", slog.String(keyJobID, job.ID), slog.Int(keyAttempt, m.Attempt),
 		slog.Int64(keySize, size), slog.Duration(keyTotal, time.Since(started)))
 
-	return nil
+	return amqp.Ack()
+}
+
+// afterFailure retries the job or, when that cannot help or attempts ran out, tells the client it failed.
+// A job that ran out of attempts is then dead-lettered.
+func (w *Worker) afterFailure(ctx context.Context, job synthesis.Job, m amqp.Message, status *reporter, err error) amqp.Outcome {
+	if ctx.Err() != nil {
+		return amqp.Reject() // shutting down: the consumer ignores this and the job is delivered again.
+	}
+
+	failure, ok := errors.AsType[*jobError](err)
+	if !ok {
+		failure = newJobError(synthesis.CodeGenerationFailed, "Synthesis job failed", err)
+	}
+
+	if failure.retryable() && m.Attempt < w.cfg.MaxAttempts {
+		delay := failure.retryDelay(w.cfg.RetryDelay, m.Attempt)
+		w.log.InfoContext(ctx, "Retrying job", slog.String(keyJobID, job.ID), slog.Int(keyAttempt, m.Attempt),
+			slog.Int(keyMaxAttempts, w.cfg.MaxAttempts), slog.Duration(keyRetryDelay, delay))
+
+		return amqp.Retry(delay)
+	}
+
+	status.send(ctx, synthesis.Failed(job.ID, m.Attempt, time.Now(), synthesis.JobError{Code: failure.code, Message: failure.message}))
+	if failure.retryable() {
+		return amqp.Reject() // only the attempt limit stopped it.
+	}
+
+	return amqp.Ack()
 }
 
 func (w *Worker) run(ctx context.Context, job synthesis.Job, m amqp.Message, status *reporter) (int64, error) {

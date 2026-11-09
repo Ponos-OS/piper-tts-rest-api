@@ -62,6 +62,7 @@ type caller struct {
 	server          *httptest.Server
 	uploadURLStatus int
 	uploadURLBody   string
+	retryAfter      string
 	uploadStatus    int
 	onUpload        http.HandlerFunc
 	onStatus        http.HandlerFunc
@@ -94,6 +95,9 @@ func (c *caller) handleUploadURL(w http.ResponseWriter, r *http.Request) {
 	c.mu.Unlock()
 
 	if c.uploadURLStatus != http.StatusOK {
+		if c.retryAfter != "" {
+			w.Header().Set("Retry-After", c.retryAfter)
+		}
 		w.WriteHeader(c.uploadURLStatus)
 
 		return
@@ -145,6 +149,9 @@ func (c *caller) statusLog(t *testing.T) []string {
 			Status        string `json:"status"`
 			Percent       *int   `json:"percent"`
 			FileSizeBytes *int64 `json:"fileSizeBytes"`
+			Error         *struct {
+				Code string `json:"code"`
+			} `json:"error"`
 		}
 		require.NoError(t, json.Unmarshal(r.body, &p))
 		entry := p.Status
@@ -153,6 +160,9 @@ func (c *caller) statusLog(t *testing.T) []string {
 		}
 		if p.FileSizeBytes != nil {
 			entry += ":" + strconv.FormatInt(*p.FileSizeBytes, 10)
+		}
+		if p.Error != nil {
+			entry += ":" + p.Error.Code
 		}
 		log = append(log, entry)
 	}
@@ -173,6 +183,8 @@ func testConfig() config.Synthesize {
 		UploadIdleTimeout:     5 * time.Second,
 		UploadTimeout:         10 * time.Second,
 		StatusCallbackTimeout: 5 * time.Second,
+		MaxAttempts:           3,
+		RetryDelay:            retryDelay,
 		WordsPerMinute:        150,
 		Callback:              config.Callback{AllowedHosts: []string{"127.0.0.1"}},
 	}
@@ -184,6 +196,43 @@ func publicOnlyConfig() config.Synthesize {
 	cfg.Callback = config.Callback{}
 
 	return cfg
+}
+
+const (
+	retryDelay = 30 * time.Second
+	// jobMessage is the second attempt, so the delay without Retry-After is twice the configured one.
+	delayAfterAttempt2 = 2 * retryDelay
+)
+
+// logBuffer collects log lines; the worker also logs from background goroutines.
+type logBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *logBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.b.Write(p)
+}
+
+func (l *logBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.b.String()
+}
+
+func newLoggedWorker(cfg config.Synthesize, synth worker.Synthesizer) (*worker.Worker, *logBuffer) {
+	logs := &logBuffer{}
+	logger := logging.New(config.Log{Mode: config.LogModeJSON, Level: config.LogLevelInfo}, "svc", logs)
+
+	return worker.New(cfg, synth, logger), logs
+}
+
+func last(entries []string) string {
+	return entries[len(entries)-1]
 }
 
 func newWorker(cfg config.Synthesize, synth worker.Synthesizer) *worker.Worker {
@@ -209,9 +258,9 @@ func TestProcess_GeneratesAndUploadsTheMP3(t *testing.T) {
 	synth := &fakeSynth{audio: []byte("mp3-bytes")}
 	w := newWorker(testConfig(), synth)
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.NoError(t, err)
+	assert.Equal(t, amqp.Ack(), got)
 	assert.Equal(t, []string{"Hello"}, synth.texts)
 	require.Len(t, api.uploads, 1)
 	assert.Equal(t, []byte("mp3-bytes"), api.uploads[0].body)
@@ -246,9 +295,9 @@ func TestProcess_ReportsEachStageToTheStatusCallback(t *testing.T) {
 	api := newCaller(t)
 	w := newWorker(testConfig(), &fakeSynth{audio: []byte("mp3-bytes")})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.NoError(t, err)
+	assert.Equal(t, amqp.Ack(), got)
 	assert.Equal(t, []string{"queued", "generating:0", "uploading:0", "uploading:99", "completed:9"}, api.statusLog(t))
 }
 
@@ -256,9 +305,9 @@ func TestProcess_StatusCallbacksCarryTheIdempotencyKeyAndAuthorization(t *testin
 	api := newCaller(t)
 	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.NoError(t, err)
+	assert.Equal(t, amqp.Ack(), got)
 	require.NotEmpty(t, api.statuses)
 	for _, r := range api.statuses {
 		assert.Equal(t, "job-1:2", r.header.Get("Idempotency-Key"))
@@ -273,9 +322,9 @@ func TestProcess_GenerationProgressFollowsTheEstimatedSize(t *testing.T) {
 	synth := &slowSynth{chunks: [][]byte{make([]byte, 3200), make([]byte, 3200)}, pause: 700 * time.Millisecond}
 	w := newWorker(testConfig(), synth)
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.NoError(t, err)
+	assert.Equal(t, amqp.Ack(), got)
 	assert.Contains(t, api.statusLog(t), "generating:99")
 }
 
@@ -295,9 +344,9 @@ func TestProcess_StatusCallbackFailuresDoNotChangeTheJob(t *testing.T) {
 			cfg.StatusCallbackTimeout = 200 * time.Millisecond
 			w := newWorker(cfg, &fakeSynth{audio: []byte("mp3-bytes")})
 
-			err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+			got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-			require.NoError(t, err)
+			assert.Equal(t, amqp.Ack(), got)
 			assert.Equal(t, 1, api.uploadCount())
 		})
 	}
@@ -307,9 +356,9 @@ func TestProcess_AsksForTheUploadURLOncePerAttempt(t *testing.T) {
 	api := newCaller(t)
 	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.NoError(t, err)
+	assert.Equal(t, amqp.Ack(), got)
 	require.Len(t, api.urlRequests, 1)
 	req := api.urlRequests[0]
 	assert.JSONEq(t, `{"jobId":"job-1","attempt":2,"contentType":"audio/mpeg"}`, string(req.body))
@@ -324,9 +373,9 @@ func TestProcess_OmitsAuthorizationWhenTheCallerSentNone(t *testing.T) {
 	msg := jobMessage(t, api.server.URL+"/upload-url")
 	msg.Authorization = ""
 
-	err := w.Process(t.Context(), msg)
+	got := w.Process(t.Context(), msg)
 
-	require.NoError(t, err)
+	assert.Equal(t, amqp.Ack(), got)
 	assert.Empty(t, api.urlRequests[0].header.Values("Authorization"))
 }
 
@@ -336,9 +385,9 @@ func TestProcess_LeavesNoTemporaryFilesBehind(t *testing.T) {
 	api := newCaller(t)
 	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.NoError(t, err)
+	assert.Equal(t, amqp.Ack(), got)
 	entries, err := os.ReadDir(tmp)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
@@ -359,11 +408,12 @@ func TestProcess_RejectsAnInvalidMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			synth := &fakeSynth{}
-			w := newWorker(testConfig(), synth)
+			w, logs := newLoggedWorker(testConfig(), synth)
 
-			err := w.Process(t.Context(), amqp.Message{Body: []byte(tt.body), Attempt: 1})
+			got := w.Process(t.Context(), amqp.Message{Body: []byte(tt.body), Attempt: 1})
 
-			require.ErrorContains(t, err, tt.want)
+			assert.Equal(t, amqp.Reject(), got)
+			assert.Contains(t, logs.String(), tt.want)
 			assert.Empty(t, synth.texts)
 		})
 	}
@@ -380,12 +430,13 @@ func TestProcess_GenerationFailureStopsBeforeAskingForAnUploadURL(t *testing.T) 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			api := newCaller(t)
-			w := newWorker(testConfig(), tt.synth)
+			w, logs := newLoggedWorker(testConfig(), tt.synth)
 
-			err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+			got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-			require.ErrorContains(t, err, "generation-failed: Audio generation failed")
-			require.ErrorIs(t, err, errPiper)
+			assert.Equal(t, amqp.Retry(delayAfterAttempt2), got)
+			assert.Contains(t, logs.String(), "generation-failed: Audio generation failed")
+			assert.Contains(t, logs.String(), "piper crashed")
 			assert.Empty(t, api.urlRequests)
 		})
 	}
@@ -405,11 +456,12 @@ func TestProcess_UploadURLFailures(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			api := newCaller(t)
 			tt.setup(api)
-			w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+			w, logs := newLoggedWorker(testConfig(), &fakeSynth{audio: []byte("x")})
 
-			err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+			got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-			require.ErrorContains(t, err, tt.want)
+			assert.Equal(t, amqp.Retry(delayAfterAttempt2), got)
+			assert.Contains(t, logs.String(), tt.want)
 			assert.Zero(t, api.uploadCount())
 		})
 	}
@@ -418,11 +470,24 @@ func TestProcess_UploadURLFailures(t *testing.T) {
 func TestProcess_UploadRejectedByStorage(t *testing.T) {
 	api := newCaller(t)
 	api.uploadStatus = http.StatusForbidden
+	w, logs := newLoggedWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+
+	assert.Equal(t, amqp.Ack(), got, "a 403 will not get better: the client is told and the job ends")
+	assert.Contains(t, logs.String(), "upload-failed: HTTP 403")
+	assert.Equal(t, "failed:upload-failed", last(api.statusLog(t)))
+}
+
+func TestProcess_StorageServerErrorIsRetried(t *testing.T) {
+	api := newCaller(t)
+	api.uploadStatus = http.StatusServiceUnavailable
 	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.ErrorContains(t, err, "upload-failed: HTTP 403")
+	assert.Equal(t, amqp.Retry(delayAfterAttempt2), got)
+	assert.NotContains(t, api.statusLog(t), "failed:upload-failed")
 }
 
 func TestProcess_DoesNotFollowRedirects(t *testing.T) {
@@ -431,11 +496,12 @@ func TestProcess_DoesNotFollowRedirects(t *testing.T) {
 	api.onUpload = func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target.server.URL+"/file.mp3", http.StatusFound)
 	}
-	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+	w, logs := newLoggedWorker(testConfig(), &fakeSynth{audio: []byte("x")})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.ErrorContains(t, err, "upload-failed: HTTP 302")
+	assert.Equal(t, amqp.Ack(), got)
+	assert.Contains(t, logs.String(), "upload-failed: HTTP 302")
 	assert.Zero(t, target.uploadCount())
 }
 
@@ -448,13 +514,13 @@ func TestProcess_UploadErrorsDoNotLeakThePresignedURL(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, conn.Close())
 	}
-	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+	w, logs := newLoggedWorker(testConfig(), &fakeSynth{audio: []byte("x")})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.ErrorContains(t, err, "upload-failed: MP3 upload failed")
-	assert.NotContains(t, err.Error(), "X-Amz-Signature")
-	assert.NotContains(t, err.Error(), "secret")
+	assert.Equal(t, amqp.Retry(delayAfterAttempt2), got)
+	assert.Contains(t, logs.String(), "upload-failed: MP3 upload failed")
+	assert.NotContains(t, logs.String(), "secret", "the signature must not reach the logs")
 }
 
 func TestProcess_UploadThatStopsMakingProgressIsAborted(t *testing.T) {
@@ -470,11 +536,12 @@ func TestProcess_UploadThatStopsMakingProgressIsAborted(t *testing.T) {
 	t.Cleanup(func() { close(stalled) })
 	cfg := testConfig()
 	cfg.UploadIdleTimeout = 300 * time.Millisecond
-	w := newWorker(cfg, &fakeSynth{audio: make([]byte, audioSize)})
+	w, logs := newLoggedWorker(cfg, &fakeSynth{audio: make([]byte, audioSize)})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.ErrorContains(t, err, "upload became idle")
+	assert.Equal(t, amqp.Retry(delayAfterAttempt2), got)
+	assert.Contains(t, logs.String(), "upload became idle")
 }
 
 func TestProcess_SlowButSteadyUploadIsNotAborted(t *testing.T) {
@@ -497,9 +564,9 @@ func TestProcess_SlowButSteadyUploadIsNotAborted(t *testing.T) {
 	cfg.UploadIdleTimeout = 500 * time.Millisecond
 	w := newWorker(cfg, &fakeSynth{audio: make([]byte, audioSize)})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.NoError(t, err)
+	assert.Equal(t, amqp.Ack(), got)
 }
 
 func TestProcess_UploadIsAbortedAtTheAbsoluteDeadline(t *testing.T) {
@@ -516,11 +583,12 @@ func TestProcess_UploadIsAbortedAtTheAbsoluteDeadline(t *testing.T) {
 	t.Cleanup(func() { close(stalled) })
 	cfg := testConfig()
 	cfg.UploadTimeout = 300 * time.Millisecond
-	w := newWorker(cfg, &fakeSynth{audio: []byte("x")})
+	w, logs := newLoggedWorker(cfg, &fakeSynth{audio: []byte("x")})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.ErrorContains(t, err, "upload timed out")
+	assert.Equal(t, amqp.Retry(delayAfterAttempt2), got)
+	assert.Contains(t, logs.String(), "upload timed out")
 }
 
 func TestProcess_RefusesCallbacksToNonPublicAddresses(t *testing.T) {
@@ -540,24 +608,24 @@ func TestProcess_RefusesCallbacksToNonPublicAddresses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := newWorker(publicOnlyConfig(), &fakeSynth{audio: []byte("x")})
+			w, logs := newLoggedWorker(publicOnlyConfig(), &fakeSynth{audio: []byte("x")})
 
-			err := w.Process(t.Context(), jobMessage(t, tt.url))
+			w.Process(t.Context(), jobMessage(t, tt.url))
 
-			require.ErrorContains(t, err, "upload-url-failed")
-			require.ErrorContains(t, err, "non-public address")
+			assert.Contains(t, logs.String(), "upload-url-failed")
+			assert.Contains(t, logs.String(), "non-public address")
 		})
 	}
 }
 
 func TestProcess_RefusesAPublicNameThatResolvesToALoopbackAddress(t *testing.T) {
 	api := newCaller(t)
-	w := newWorker(publicOnlyConfig(), &fakeSynth{audio: []byte("x")})
+	w, logs := newLoggedWorker(publicOnlyConfig(), &fakeSynth{audio: []byte("x")})
 	localhostURL := "http://localhost:" + portOf(t, api.server.URL) + "/upload-url"
 
-	err := w.Process(t.Context(), jobMessage(t, localhostURL))
+	w.Process(t.Context(), jobMessage(t, localhostURL))
 
-	require.ErrorContains(t, err, "non-public address")
+	assert.Contains(t, logs.String(), "non-public address")
 	assert.Empty(t, api.urlRequests)
 }
 
@@ -567,33 +635,34 @@ func TestProcess_ListedHostMayBeAPrivateAddress(t *testing.T) {
 	cfg.Callback.AllowedHosts = []string{"127.0.0.1", "other.example.com"}
 	w := newWorker(cfg, &fakeSynth{audio: []byte("x")})
 
-	err := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.NoError(t, err)
+	assert.Equal(t, amqp.Ack(), got)
 }
 
 func TestProcess_ListingOneNameDoesNotAllowAnotherNameForTheSameAddress(t *testing.T) {
 	api := newCaller(t)
 	cfg := testConfig()
 	cfg.Callback.AllowedHosts = []string{"127.0.0.1"}
-	w := newWorker(cfg, &fakeSynth{audio: []byte("x")})
+	w, logs := newLoggedWorker(cfg, &fakeSynth{audio: []byte("x")})
 	localhostURL := "http://localhost:" + portOf(t, api.server.URL) + "/upload-url"
 
-	err := w.Process(t.Context(), jobMessage(t, localhostURL))
+	w.Process(t.Context(), jobMessage(t, localhostURL))
 
-	require.ErrorContains(t, err, "non-public address")
+	assert.Contains(t, logs.String(), "non-public address")
 	assert.Empty(t, api.urlRequests)
 }
 
-func TestProcess_ShutdownMidJobReportsTheContextError(t *testing.T) {
+func TestProcess_ShutdownMidJobDoesNotTellTheClientItFailed(t *testing.T) {
 	api := newCaller(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
 
-	err := w.Process(ctx, jobMessage(t, api.server.URL+"/upload-url"))
+	w.Process(ctx, jobMessage(t, api.server.URL+"/upload-url"))
 
-	require.ErrorIs(t, err, context.Canceled)
+	assert.Empty(t, api.statusLog(t))
+	assert.Zero(t, api.uploadCount())
 }
 
 func portOf(t *testing.T, rawURL string) string {
@@ -603,4 +672,101 @@ func portOf(t *testing.T, rawURL string) string {
 	require.NoError(t, err)
 
 	return req.URL.Port()
+}
+
+func TestProcess_RetriesWhatMayWorkNextTime(t *testing.T) {
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			api := newCaller(t)
+			api.uploadURLStatus = status
+			w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+
+			got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+
+			assert.Equal(t, amqp.Retry(delayAfterAttempt2), got)
+			assert.NotContains(t, api.statusLog(t), "failed:upload-url-failed", "the client hears about a failure only when it is final")
+		})
+	}
+}
+
+func TestProcess_DoesNotRetryWhatWillNotChange(t *testing.T) {
+	for _, status := range []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusGone} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			api := newCaller(t)
+			api.uploadURLStatus = status
+			w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+
+			got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+
+			assert.Equal(t, amqp.Ack(), got)
+			assert.Equal(t, "failed:upload-url-failed", last(api.statusLog(t)))
+		})
+	}
+}
+
+func TestProcess_ARateLimitedServerChoosesTheRetryDelay(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     int
+		retryAfter string
+		want       time.Duration
+	}{
+		{"seconds", http.StatusTooManyRequests, "7", 7 * time.Second},
+		{"retry immediately", http.StatusTooManyRequests, "0", 0},
+		{"no header", http.StatusTooManyRequests, "", delayAfterAttempt2},
+		{"unreadable header", http.StatusTooManyRequests, "soon", delayAfterAttempt2},
+		{"only a 429 is trusted with the delay", http.StatusServiceUnavailable, "7", delayAfterAttempt2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			api := newCaller(t)
+			api.uploadURLStatus = tt.status
+			api.retryAfter = tt.retryAfter
+			w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+
+			got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+
+			assert.Equal(t, amqp.Retry(tt.want), got)
+		})
+	}
+}
+
+func TestProcess_AJobThatUsedAllItsAttemptsIsDeadLetteredAndTheClientIsTold(t *testing.T) {
+	api := newCaller(t)
+	w := newWorker(testConfig(), &fakeSynth{startErr: errPiper})
+	msg := jobMessage(t, api.server.URL+"/upload-url")
+	msg.Attempt = 3
+
+	got := w.Process(t.Context(), msg)
+
+	assert.Equal(t, amqp.Reject(), got)
+	assert.Equal(t, "failed:generation-failed", last(api.statusLog(t)))
+}
+
+func TestProcess_TheFailedStatusCarriesTheTimeAndTheError(t *testing.T) {
+	api := newCaller(t)
+	api.uploadURLStatus = http.StatusBadRequest
+	w := newWorker(testConfig(), &fakeSynth{audio: []byte("x")})
+	before := time.Now().Add(-time.Second)
+
+	w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
+
+	var failed struct {
+		JobID    string    `json:"jobId"`
+		Status   string    `json:"status"`
+		Attempt  int       `json:"attempt"`
+		FailedAt time.Time `json:"failedAt"`
+		Error    struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(api.statuses[len(api.statuses)-1].body, &failed))
+	assert.Equal(t, "job-1", failed.JobID)
+	assert.Equal(t, "failed", failed.Status)
+	assert.Equal(t, 2, failed.Attempt)
+	assert.Equal(t, "upload-url-failed", failed.Error.Code)
+	assert.Equal(t, "HTTP 400", failed.Error.Message)
+	assert.WithinRange(t, failed.FailedAt, before, time.Now().Add(time.Second))
+	assert.Equal(t, time.UTC, failed.FailedAt.Location())
 }

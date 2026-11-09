@@ -52,7 +52,7 @@ func (w *Worker) uploadURL(ctx context.Context, job synthesis.Job, attempt int, 
 	defer closeResponse(resp)
 
 	if !isSuccess(resp.StatusCode) {
-		return "", httpStatusError(synthesis.CodeUploadURLFailed, resp.StatusCode)
+		return "", httpStatusError(synthesis.CodeUploadURLFailed, resp)
 	}
 
 	var payload uploadURLResponse

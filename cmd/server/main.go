@@ -78,7 +78,7 @@ func run() error {
 	boot.InfoContext(ctx, "TTS API running", slog.Int(keyPort, cfg.Service.Port))
 	boot.InfoContext(ctx, "Piper model", slog.String(keyPath, cfg.PiperModelPath), slog.Int(keySampleRate, synth.SampleRate()))
 
-	consumed, err := startWorker(ctx, stop, cfg.Synthesize, logger, synth)
+	consumed, err := startWorker(ctx, cfg.Synthesize, logger, synth)
 	if err != nil {
 		return err
 	}
@@ -102,10 +102,10 @@ func run() error {
 	)
 }
 
-// startWorker consumes jobs in the background and closes the consumer when it stops.
-// A consumer that stops for any reason stops the whole service (stop), so the orchestrator restarts it.
-func startWorker(ctx context.Context, stop context.CancelFunc, cfg config.Synthesize, logger *slog.Logger, synth *piper.Synthesizer) (<-chan error, error) {
-	consumer, err := amqp.NewConsumer(cfg.RabbitMQ)
+// startWorker consumes jobs in the background until ctx is cancelled, then closes the consumer.
+// The consumer reconnects by itself when RabbitMQ goes away.
+func startWorker(ctx context.Context, cfg config.Synthesize, logger *slog.Logger, synth *piper.Synthesizer) (<-chan error, error) {
+	consumer, err := amqp.NewConsumer(cfg.RabbitMQ, logger)
 	if err != nil {
 		return nil, fmt.Errorf("amqp consumer: %w", err)
 	}
@@ -113,9 +113,8 @@ func startWorker(ctx context.Context, stop context.CancelFunc, cfg config.Synthe
 	jobs := worker.New(cfg, pipeline{synth}, logger)
 	done := make(chan error, 1)
 	go func() {
-		runErr := consumer.Run(ctx, jobs.Process)
-		stop()
-		done <- errors.Join(runErr, consumer.Close())
+		consumer.Run(ctx, jobs.Process)
+		done <- consumer.Close()
 	}()
 
 	return done, nil

@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"testing"
+	"time"
 
 	amqp091 "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
@@ -35,4 +36,28 @@ func TestNewMessage_ReadsAttemptAndAuthorizationFromHeaders(t *testing.T) {
 			assert.Equal(t, tt.wantAuth, got.Authorization)
 		})
 	}
+}
+
+func TestRetryHeaders_KeepsTheCallersHeadersDropsTheBrokersAndSetsTheAttemptAndTheDeliveryTime(t *testing.T) {
+	headers := amqp091.Table{
+		"authorization":       "Bearer abc",
+		"timestamp":           int64(1700000000000),
+		"traceparent":         "00-abc-def-01",
+		"x-attempt":           int32(1),
+		"x-opt-delivery-time": int64(1),
+		"x-death":             []any{"anything"},
+		"x-delivery-count":    int64(2),
+	}
+
+	due := time.UnixMilli(1700000005000)
+
+	got := retryHeaders(headers, 3, due)
+
+	assert.Equal(t, amqp091.Table{
+		"authorization":       "Bearer abc",
+		"timestamp":           int64(1700000000000),
+		"traceparent":         "00-abc-def-01",
+		"x-attempt":           3,
+		"x-opt-delivery-time": int64(1700000005000),
+	}, got)
 }

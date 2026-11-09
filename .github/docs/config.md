@@ -174,7 +174,7 @@ Use this for log aggregators (e.g. Loki, Elasticsearch, Datadog).
 
 `jobId`, attempt, model, instance, state/stage, error code, and trace ID.
 
-- Queue depth, oldest-message age, unacknowledged messages, retry-queue depth, and DLQ depth.
+- Queue depth, oldest-message age, unacknowledged messages, and DLQ depth.
 - Retry rate, terminal-failure rate by stage/error code, and actual retry delay.
 - Queue wait, generation, upload, and total-duration percentiles.
 - File-size and text-character distributions by model and instance.
@@ -205,7 +205,7 @@ Alert on sustained queue age/depth, any unexpected DLQ growth, elevated terminal
     <tr>
       <td>SYNTHESIZE_RETRY_DELAY_MS</td>
       <td>30000</td>
-      <td>Delay between retries.</td>
+      <td>Delay after the first failed attempt; the nth retry waits n times this. A 429 with <code>Retry-After</code> overrides it.</td>
     </tr>
     <tr>
       <td>SYNTHESIZE_STATUS_CALLBACK_TIMEOUT_MS</td>
@@ -258,11 +258,6 @@ Alert on sustained queue age/depth, any unexpected DLQ growth, elevated terminal
       <td>SYNTHESIZE_WORK_QUEUE</td>
       <td>synthesize.work</td>
       <td>Worker queue name.</td>
-    </tr>
-    <tr>
-      <td>SYNTHESIZE_RETRY_QUEUE</td>
-      <td>synthesize.retry</td>
-      <td>Retry queue name.</td>
     </tr>
     <tr>
       <td>SYNTHESIZE_DEAD_LETTER_EXCHANGE</td>

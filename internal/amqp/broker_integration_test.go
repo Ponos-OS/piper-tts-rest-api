@@ -19,7 +19,7 @@ import (
 	"github.com/kasir-barati/piper-tts-rest-api/internal/synthesis"
 )
 
-const rabbitImage = "rabbitmq:4.3-management-alpine"
+const rabbitImage = "rabbitmq:4.4-management-alpine"
 
 // startRabbit runs a throwaway RabbitMQ and returns the broker config and the management API base URL.
 func startRabbit(t *testing.T) (config.RabbitMQ, string) {
@@ -38,7 +38,6 @@ func startRabbit(t *testing.T) (config.RabbitMQ, string) {
 		URL:                amqpURL,
 		Exchange:           "synthesize",
 		WorkQueue:          "synthesize.work",
-		RetryQueue:         "synthesize.retry",
 		DeadLetterExchange: "synthesize.dlx",
 		DeadLetterQueue:    "synthesize.dlq",
 	}, httpURL
@@ -108,11 +107,6 @@ func TestConnect_DeclaresTheTopology(t *testing.T) {
 			"x-dead-letter-exchange":    "synthesize.dlx",
 			"x-dead-letter-routing-key": "synthesize",
 		},
-		"synthesize.retry": {
-			"x-queue-type":              "quorum",
-			"x-dead-letter-exchange":    "synthesize",
-			"x-dead-letter-routing-key": "synthesize",
-		},
 		"synthesize.dlq": {"x-queue-type": "quorum"},
 	}
 	for name, arguments := range wantArguments {
@@ -121,13 +115,11 @@ func TestConnect_DeclaresTheTopology(t *testing.T) {
 		assert.Equal(t, queueInfo{Type: "quorum", Durable: true, Arguments: arguments}, queue, name)
 	}
 
-	var work, dlq, retry []bindingInfo
+	var work, dlq []bindingInfo
 	managementJSON(t, api, "/api/queues/%2F/synthesize.work/bindings", &work)
 	managementJSON(t, api, "/api/queues/%2F/synthesize.dlq/bindings", &dlq)
-	managementJSON(t, api, "/api/queues/%2F/synthesize.retry/bindings", &retry)
 	assert.Contains(t, work, bindingInfo{Source: "synthesize", RoutingKey: "synthesize"})
 	assert.Contains(t, dlq, bindingInfo{Source: "synthesize.dlx", RoutingKey: "synthesize"})
-	assert.Equal(t, []bindingInfo{{Source: "", RoutingKey: "synthesize.retry"}}, retry, "only the default exchange")
 }
 
 func TestConnect_IsRepeatable(t *testing.T) {

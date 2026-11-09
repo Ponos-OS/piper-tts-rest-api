@@ -74,6 +74,58 @@ Options considered:
 
 Recommendation: `amqp091-go`. The service's correctness is in the details a wrapper abstracts (when to ack, publishing to the retry queue before acking, confirms, headers for trace propagation), and understanding them is part of the goal. Reconnection is the one real saving of `go-rabbitmq`; keep it isolated in `internal/amqp` so the choice can be revisited without touching the worker. Before step 9, check `go-rabbitmq` recent release activity and whether it exposes arbitrary queue arguments and headers, in case you want to switch.
 
+## RabbitMQ retry and delay: measurements
+
+Question: with `x-opt-delivery-time` (RabbitMQ 4.4), does a message with a short delay wait behind an earlier-published message with a long delay (head-of-line blocking)? Answer: no. Measured on 2026-11-09 with random delays (200 ms to 8 s) and 10, 1000 and 10000 messages: every message arrived within 34 ms of its due time and none was held behind a longer-delay one, while the same delays through a retry queue with per-message TTL (the control) were blocked. The test program and its full logs live outside this repository, in `/tmp/rabbit-experiments` (see its `README.md`). The measurements below, taken earlier against `rabbitmq:4.3-management-alpine` (4.3.7) and `rabbitmq:4.4-management-alpine` (4.4.0) with 100 messages per scenario, agree with that result.
+
+### Delaying a message
+
+Two ways to make a message wait, with the same 100 delays through both:
+
+| Scenario | Mechanism | Broker | Mean lateness | Late by more than 250 ms | Pairs out of due-time order |
+|---|---|---|---|---|---|
+| Random delays 0.2-6 s | Retry queue with per-message TTL and a dead-letter exchange | 4.3 | 2697 ms | 91 of 100 | 2474 of 4950 |
+| same | same | 4.4 | 2698 ms | 91 of 100 | 2474 of 4950 |
+| same | `x-opt-delivery-time` header | 4.4 | 4 ms | 0 | 0 |
+| One 8 s message first, then 99 of 1 s | Retry queue with TTL | 4.3 and 4.4 | 6944 ms | 99 of 100 | |
+| same | `x-opt-delivery-time` header | 4.4 | 7 ms | 0 | 0 |
+
+- A retry queue with per-message TTL blocks at the head of the queue (queues are FIFO and an expired message is released only when it reaches the head). With one 8 s message first, all 100 messages arrived at 8.0 s; the 99 that were due at 1.0 s were about 7 s late. With random delays they arrived in clumps instead of evenly. 4.3 and 4.4 behave the same.
+- `x-opt-delivery-time` (a header holding a `long`, milliseconds since the epoch) is new in RabbitMQ 4.4. An AMQP 0.9.1 publisher can set it, no plugin and no queue argument are needed. The message is stored in the queue at once and becomes visible to consumers at that time. Measured: messages arrived within 2-7 ms of their due time, in due-time order, and did not block each other.
+- On 4.3 the header is silently ignored: all 100 messages arrived within 11 ms. Using it requires 4.4 or newer.
+- Consequence for `Retry-After`: a retry queue can honor it per message, but one long `Retry-After` delays every retry behind it. With `x-opt-delivery-time` the service can honor it per message without that problem.
+
+### Returning a message to the queue (`x-delivery-limit=3`, 100 messages)
+
+| Consumer action | Deliveries per message | Dead-lettered | `x-delivery-count` header |
+|---|---|---|---|
+| `basic.nack(requeue=true)` | 25 each (stopped by the test), 2500 in total | 0 | never present; `x-acquired-count` present on 2400 redeliveries |
+| `basic.reject(requeue=true)` | exactly 4 each (1 + 3 redeliveries) | 100 of 100 | 1, 2, 3 |
+
+Both brokers gave the same numbers. `nack` does not count toward the delivery limit (documented since 4.3), `reject` does. A requeue loop with `nack` never ends by itself.
+
+Delayed retry (queue arguments `x-delayed-retry-type=failed`, `x-delayed-retry-min=300`, `x-delayed-retry-max=2000`, consumer uses `reject(requeue=true)`): the broker held each message back for about `min * x-delivery-count`.
+
+| Wait | 4.3 | 4.4 |
+|---|---|---|
+| before delivery 2 | 310 ms | 304 ms |
+| before delivery 3 | 608 ms | 607 ms |
+| before delivery 4 | 906 ms | 910 ms |
+
+The delay is queue-wide and linear. The documentation describes a way to request an explicit time for a returned message only for AMQP 1.0 (`x-opt-delivery-time` in the `modified` outcome); nothing was found for an AMQP 0.9.1 consumer returning a message.
+
+### What this means for the design
+
+- Decided (Option A, implemented in step 11; the retry queue is gone): publish the retry back to the work exchange with `x-opt-delivery-time = now + delay`, then ack the original. Keeps `Retry-After`, our own attempt count and attempt limit; removes the retry queue and the blocking. Needs 4.4.
+- Rejected (Option B), broker-native: `reject(requeue=true)` with `x-delivery-limit` and delayed retry. Least code, attempts counted by the broker (crash redeliveries included), exhausted jobs dead-lettered by the broker. Loses `Retry-After`, and attempts and delay become queue arguments fixed at declaration.
+- RabbitMQ 4.4 is now the baseline of the project (`compose.yml` and the integration tests use `rabbitmq:4.4-management-alpine`).
+
+### Not measured
+
+- An AMQP 0.9.1 consumer requesting a delay when it rejects or nacks a message (undocumented).
+- Delayed messages at scale, and any limit on their number or delay (the documentation states only that they count toward the queue length limit).
+- Absolute timings on production hardware; these runs used local containers on one machine.
+
 ## Lint configuration
 
 The linter list you pasted is `golangci-lint` v1 style. Several entries no longer exist in v2 (checked against the current golangci-lint docs):
@@ -222,14 +274,14 @@ Notes for review:
 - Learn: AMQP concepts (exchange, queue, binding, ack, confirm), `amqp091-go` channels, reconnect handling, how `amqp091-go` handles concurrent publishing.
 - Done when: an integration test against a real RabbitMQ (testcontainers, `integration` build tag) shows the topology matches what the TS service declares.
 - Implemented:
-  - `internal/amqp` (`broker.go`, `topology.go`): `Connect(config.RabbitMQ)` dials (10 s timeout), declares the topology and turns on publisher confirms; `(*Broker).PublishJob(ctx, job, authorization)` publishes and returns only after the broker confirmed (`DeferredConfirmation.WaitContext`); `Close()`. Topology is the TS one: durable direct exchanges `synthesize` and `synthesize.dlx`; quorum queues `synthesize.work` (`x-delivery-limit` 5, dead-letters to the DLX), `synthesize.dlq` (bound to the DLX) and `synthesize.retry` (unbound, dead-letters back into `synthesize`), all with routing key `synthesize`. Prefetch is a consumer-channel setting, so it comes with the consumer in step 10.
+  - `internal/amqp` (`broker.go`, `topology.go`): `Connect(config.RabbitMQ)` dials (10 s timeout), declares the topology and turns on publisher confirms; `(*Broker).PublishJob(ctx, job, authorization)` publishes and returns only after the broker confirmed (`DeferredConfirmation.WaitContext`); `Close()`. Topology is the TS one: durable direct exchanges `synthesize` and `synthesize.dlx`; quorum queues `synthesize.work` (`x-delivery-limit` 5, dead-letters to the DLX), `synthesize.dlq` (bound to the DLX), all with routing key `synthesize`. Step 11 removed the `synthesize.retry` queue. Prefetch is a consumer-channel setting, so it comes with the consumer in step 10.
   - Message: persistent, `application/json`, `messageId` = job ID, `timestamp`, headers `timestamp` (ms) and `authorization` (only when the caller sent one; TS stored the string `"undefined"` when it did not). Body `{jobId, text, genUploadUrl, statusCallbackUrl}` (`synthesis.Job`, the ID is `uuid.NewString()` from `github.com/google/uuid`, a random UUID v4; the standard library has no UUID package). `synthesis.RoutingKey` is shared with the consumer.
   - Channels: `amqp091-go` already serialises concurrent publishes on a channel (`PublishWithDeferredConfirm` holds the channel's lock while it registers the confirmation and writes the message), so concurrent publishing is safe. The broker's own mutex guards `conn`, `pub` and `closed`, which a reconnect replaces; only the call that hands the message to the channel holds it, waiting for the confirm does not.
   - Reconnect (TS had none, so one broker restart meant 503 until the process restarted): if the connection or channel is closed, the next `PublishJob` re-dials and re-declares the topology; while the broker is down it fails (503) and tries again on the next request. Reconnecting consumers is part of step 11.
   - `POST /synthesize` (`httpapi/synthesize.go`): `decodeJSON[synthesis.Request]`, then `Normalize` with the configured callback policy, then publish with a 10 s timeout. 202 `{"jobId"}`; 400 `Invalid request body` (shape) or `Invalid callback URL` (both with `fields: [{field, rule}]`); 413; 503 `Unable to accept synthesize job` (the cause is logged, never returned: it can contain the broker URL). `httpapi` depends on a one-method interface, `JobPublisher`, defined next to its only caller, which `*amqp.Broker` satisfies. `main` connects at startup (fail fast, like TS) and closes the broker after the server has drained.
 - Differences: JSON error shape (`{error, fields}`, no `code` field); the TS publish waited for confirms without a timeout.
 - Not done: the trace context header (step 12), `mandatory` publishing (a job published while the work queue is missing would be confirmed but unroutable; the queue is declared at connect, so only an operator deleting it at runtime causes this).
-- Tests: unit tests for the message properties and every `/synthesize` branch (fake publisher). Integration (`-tags integration`, testcontainers, `rabbitmq:4.3-management-alpine`, ~20 s): the topology is read back from the management API (exchange types, durability, queue type and arguments, bindings, and that the retry queue has none), a published job arrives with the right body, properties and headers, the broker reconnects after its connection is closed, and publishing after `Close` fails. Breaking the delivery limit, binding the retry queue, or disabling the reconnect each fails one of them.
+- Tests: unit tests for the message properties and every `/synthesize` branch (fake publisher). Integration (`-tags integration`, testcontainers, `rabbitmq:4.4-management-alpine`, ~20 s): the topology is read back from the management API (exchange types, durability, queue type and arguments, bindings,), a published job arrives with the right body, properties and headers, the broker reconnects after its connection is closed, and publishing after `Close` fails. Breaking the delivery limit, or disabling the reconnect each fails one of them.
 
 ### 10. Worker: consume, generate, upload
 
@@ -261,10 +313,19 @@ Notes for review:
 ### 11. Worker: retries, DLQ, failure semantics
 
 - TS source: same worker file, state machine in `.github/docs/APIs.md`.
-- Goal: retryable vs terminal failures, delayed retry via retry queue with `x-attempt` preserved, DLQ on exhaustion, `failed` callback with `failedAt` and `error`, at-least-once behavior on crash.
+- Goal: retryable vs terminal failures, delayed retry through `x-opt-delivery-time` with `x-attempt` preserved, DLQ on exhaustion, `failed` callback with `failedAt` and `error`, at-least-once behavior on crash.
 - Learn: error classification with wrapped errors, idempotency, redelivery.
-- Deferred from step 9: extract the reconnect check in `amqp.Broker.publish` into a helper named `reconnect`, so it is easy to find when the consumer reconnect is written.
 - Done when: every transition in the state diagram has a test.
+- Implemented:
+  - Outcomes: `Worker.Process` returns an `amqp.Outcome` instead of an error: `Ack` (uploaded, or failed for good), `Retry(delay)` or `Reject`. `amqp.Consumer.Run(ctx, handle)` settles the message with it. A job interrupted by shutdown keeps no outcome: the consumer ignores it and leaves the message unacknowledged.
+  - Classification (`jobError.retryable`), as in TS: anything that is not an HTTP answer (network error, timeout, crash of piper or ffmpeg) is retried; of HTTP answers only 408, 429 and 5xx are. Other 4xx, and 3xx because redirects are not followed, end the job. A 429 with `Retry-After` (seconds or an HTTP date) sets the delay, any other status waits `SYNTHESIZE_RETRY_DELAY_MS` times the number of the attempt that failed (30 s, 60 s, ...). The status is kept in the error, so the upload path passes the storage's `jobError` through instead of wrapping it (a test caught that the first version lost it).
+  - Retry: while `attempt < SYNTHESIZE_MAX_ATTEMPTS`, the consumer republishes the message to the work exchange (persistent, same `messageId`, caller headers copied except the broker's `x-` ones, `x-attempt` = attempt + 1, `x-opt-delivery-time` = now + delay in epoch ms), waits for the broker's confirm, and only then acknowledges the original. RabbitMQ 4.4 holds the message in the work queue until it is due; older brokers ignore the header and redeliver at once.
+  - Exhausted or terminal: the `failed` status (`failedAt` UTC, `error{code,message}`) is sent. A job that used all its attempts is then rejected, so it lands in the DLQ (decided; TS acknowledged it). A job that failed for a reason a retry cannot fix (a 4xx from the client's server) is acknowledged. The DLQ also receives invalid messages (no `failed` status, because the job cannot be trusted), messages whose retry could not be published, and messages over `x-delivery-limit` (crash loops).
+  - Publishing the retry is mandatory: an exchange without a bound queue would otherwise confirm the message and drop it. If the retry cannot be published (unroutable, no confirm, timeout), the job is dead-lettered. TS requeued it, but a requeue loops at full speed because `x-delivery-limit` does not count explicit requeues (observed: over a thousand redeliveries in 12 s), so a job in the DLQ is the safer outcome.
+  - Consumer reconnect: when the connection drops, `Run` redials (first attempt at once, then 1 s doubling up to 30 s) and keeps consuming; it declares the topology again, so it also works after a broker that lost its queues. A job being handled during the drop cannot be settled and RabbitMQ delivers it again (at least once). `main` no longer stops the service when the consumer stops, because it only ends with the context. Deferred from step 9 and done here: the publisher's reconnect check is the `reconnect` helper in `broker.go`.
+  - Consumer channels: one for consuming (prefetch 1) and one in confirm mode for retries.
+- Tests: worker tests for the outcome of every status in the matrix (408, 429, 500, 502, 503 retried; 400, 401, 403, 404, 410 end the job), `Retry-After` handling, the last attempt, the `failed` payload, no `failed` for a job that will be retried, no callbacks during shutdown, and storage errors on the upload path; unit tests for the classification and `Retry-After` parsing. Consumer integration tests: retry returns the job after the delay with attempt + 1 and its headers, an unpublishable retry dead-letters the job once, reconnect after a dropped connection, plus the earlier ack, dead-letter, shutdown and prefetch tests. Breaking the classification, the attempt limit, the `Retry-After` rule, the mandatory flag and the attempt increment each fails a test.
+- Not covered: crash after upload and before the ack (the redelivered job uploads again, as documented in `APIs.md`), and reconnecting while the broker stays down (only the first reconnect after a drop is tested).
 
 ### 12. OpenTelemetry
 

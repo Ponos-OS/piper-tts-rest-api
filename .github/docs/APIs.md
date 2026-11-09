@@ -165,7 +165,7 @@ stateDiagram-v2
   completed --> [*]
 ```
 
-Per-message retry TTL is not a precise scheduler: RabbitMQ expires a message only when it reaches the queue head. A short retry can wait behind an earlier longer retry. Monitor actual retry delay; use delay buckets or a delayed-message mechanism if this becomes unacceptable.
+A retry is republished to the work queue with the `x-opt-delivery-time` header (RabbitMQ 4.4 or newer; older brokers ignore it and redeliver at once). Delayed messages do not block each other. The delay is the `Retry-After` of a 429 response, otherwise `SYNTHESIZE_RETRY_DELAY_MS` times the number of the failed attempt.
 
 You must use HTTPS callback endpoints in production. URL credentials and fragments are rejected. Set `SYNTHESIZE_CALLBACK_ALLOWED_HOSTS` to the exact client hostnames allowed to receive callbacks; an empty value permits any valid HTTP(S) hostname.
 

@@ -15,7 +15,6 @@ import (
 //	synthesize (exchange) --synthesize--> synthesize.work   (failed after x-delivery-limit: dead-lettered)
 //	                                          |
 //	synthesize.dlx (exchange) --synthesize--> synthesize.dlq
-//	synthesize.retry: no binding; a delayed job is published to it and expires back into the exchange.
 func declareTopology(ch *amqp091.Channel, cfg config.RabbitMQ) error {
 	steps := []struct {
 		name string
@@ -33,12 +32,6 @@ func declareTopology(ch *amqp091.Channel, cfg config.RabbitMQ) error {
 			}))
 		}},
 		{"bind " + cfg.WorkQueue, func() error { return bind(ch, cfg.WorkQueue, cfg.Exchange) }},
-		{"queue " + cfg.RetryQueue, func() error {
-			return declareQueue(ch, cfg.RetryQueue, quorum(amqp091.Table{
-				"x-dead-letter-exchange":    cfg.Exchange,
-				"x-dead-letter-routing-key": synthesis.RoutingKey,
-			}))
-		}},
 	}
 
 	for _, step := range steps {

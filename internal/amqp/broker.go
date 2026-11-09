@@ -23,9 +23,8 @@ const (
 )
 
 var (
-	errClosed         = errors.New("broker is closed")
-	errConsumerClosed = errors.New("consumer connection closed")
-	errNotConfirmed   = errors.New("broker did not confirm the message")
+	errClosed       = errors.New("broker is closed")
+	errNotConfirmed = errors.New("broker did not confirm the message")
 )
 
 // Broker publishes jobs to the work queue. It is safe for concurrent use.
@@ -97,8 +96,7 @@ func (b *Broker) publish(ctx context.Context, p amqp091.Publishing) (*amqp091.De
 		return nil, errClosed
 	}
 	if b.conn.IsClosed() || b.pub.IsClosed() {
-		_ = b.conn.Close() //nolint:errcheck // it is being replaced; closing an already closed connection fails.
-		if err := b.connect(); err != nil {
+		if err := b.reconnect(); err != nil {
 			return nil, err
 		}
 	}
@@ -109,6 +107,13 @@ func (b *Broker) publish(ctx context.Context, p amqp091.Publishing) (*amqp091.De
 	}
 
 	return confirmation, nil
+}
+
+// reconnect replaces a lost connection and channel. The caller holds b.mu.
+func (b *Broker) reconnect() error {
+	_ = b.conn.Close() //nolint:errcheck // it is being replaced; closing an already closed connection fails.
+
+	return b.connect()
 }
 
 // connect replaces b.conn and b.pub. The caller holds b.mu, except in Connect.

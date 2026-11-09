@@ -25,7 +25,7 @@ The example asks KEDA to add capacity around two queued jobs per replica; calibr
 - Bound `maxReplicaCount` by model-download capacity, CPU quota, memory, callback/storage capacity, and RabbitMQ connection limits.
 - Alert on DLQ growth, retry rate, queue age, and sustained unacknowledged messages before adding replicas blindly.
 
-Retries consume queue capacity too. The retry queue is intentionally delayed and FIFO; use its depth and observed delay as a separate signal from immediate work backlog.
+Retries consume queue capacity too. Delayed retries sit in the work queue until due, so its depth includes them.
 
 ## Rollouts and recovery
 

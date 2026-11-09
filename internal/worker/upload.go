@@ -22,6 +22,10 @@ var (
 // UploadTimeout bounds the whole call and UploadIdleTimeout the time without any bytes being sent.
 func (w *Worker) upload(ctx context.Context, uploadURL string, a audio, report func(percent int)) error {
 	if err := w.put(ctx, uploadURL, a, report); err != nil {
+		if failure, ok := errors.AsType[*jobError](err); ok {
+			return failure // the storage answered with an HTTP failure, which says whether a retry can help.
+		}
+
 		return newJobError(synthesis.CodeUploadFailed, "MP3 upload failed", err)
 	}
 
@@ -58,7 +62,7 @@ func (w *Worker) put(ctx context.Context, uploadURL string, a audio, report func
 	defer closeResponse(resp)
 
 	if !isSuccess(resp.StatusCode) {
-		return httpStatusError(synthesis.CodeUploadFailed, resp.StatusCode)
+		return httpStatusError(synthesis.CodeUploadFailed, resp)
 	}
 
 	return nil

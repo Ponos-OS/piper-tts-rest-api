@@ -54,7 +54,6 @@ const (
 	defaultLogLevel            = LogLevelInfo
 	defaultExchange            = "synthesize"
 	defaultWorkQueue           = "synthesize.work"
-	defaultRetryQueue          = "synthesize.retry"
 	defaultDeadLetterExchange  = "synthesize.dlx"
 	defaultDeadLetterQueue     = "synthesize.dlq"
 	defaultOTLPLogShippingMode = logShippingOTLP
@@ -96,7 +95,7 @@ type Synthesize struct {
 	MaxBodySizeBytes int
 	// MaxAttempts is the total processing attempts, including the first.
 	MaxAttempts int
-	// RetryDelay is how long a failed job waits in the retry queue.
+	// RetryDelay is the wait after the first failed attempt; it grows with the attempt number.
 	RetryDelay time.Duration
 	// StatusCallbackTimeout bounds one status callback call.
 	StatusCallbackTimeout time.Duration
@@ -117,7 +116,6 @@ type RabbitMQ struct {
 	URL                string
 	Exchange           string
 	WorkQueue          string
-	RetryQueue         string
 	DeadLetterExchange string
 	DeadLetterQueue    string
 }
@@ -198,7 +196,6 @@ func loadSynthesize(l *loader, env string) Synthesize {
 			URL:                l.amqpURL("RABBITMQ_URL", defaultRabbitMQURL),
 			Exchange:           l.name("SYNTHESIZE_EXCHANGE", defaultExchange),
 			WorkQueue:          l.name("SYNTHESIZE_WORK_QUEUE", defaultWorkQueue),
-			RetryQueue:         l.name("SYNTHESIZE_RETRY_QUEUE", defaultRetryQueue),
 			DeadLetterExchange: l.name("SYNTHESIZE_DEAD_LETTER_EXCHANGE", defaultDeadLetterExchange),
 			DeadLetterQueue:    l.name("SYNTHESIZE_DEAD_LETTER_QUEUE", defaultDeadLetterQueue),
 		},
