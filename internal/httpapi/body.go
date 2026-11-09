@@ -21,8 +21,8 @@ var (
 // fieldError says which JSON field broke which rule.
 // Rule is a validator tag such as "required", or "type" when the JSON type is wrong.
 type fieldError struct {
-	Field string
-	Rule  string
+	Field string `json:"field"`
+	Rule  string `json:"rule"`
 }
 
 // validationError is returned when the body is valid JSON but does not match the request type.

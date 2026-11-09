@@ -63,7 +63,10 @@ func run() error {
 	boot.InfoContext(ctx, "TTS API running", slog.Int(keyPort, cfg.Service.Port))
 	boot.InfoContext(ctx, "Piper model", slog.String(keyPath, cfg.PiperModelPath), slog.Int(keySampleRate, synth.SampleRate()))
 
-	if err := httpapi.Serve(ctx, ln, httpapi.NewRouter(logger)); err != nil {
+	if err := httpapi.Serve(ctx, ln, httpapi.NewRouter(logger, synth, httpapi.Options{
+		MaxConcurrency:   cfg.MaxConcurrency,
+		MaxBodySizeBytes: cfg.MaxBodySizeBytes,
+	})); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
 

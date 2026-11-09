@@ -25,7 +25,8 @@ func newRouter() (http.Handler, *bytes.Buffer) {
 	out := &bytes.Buffer{}
 	logger := logging.New(config.Log{Mode: config.LogModeJSON, Level: config.LogLevelInfo}, "svc", out)
 
-	return httpapi.NewRouter(logger), out
+	// The tests using this router never reach /speak, so no synthesizer is needed.
+	return httpapi.NewRouter(logger, nil, httpapi.Options{MaxConcurrency: 1, MaxBodySizeBytes: 1000}), out
 }
 
 func do(t *testing.T, h http.Handler, method, target string, headers map[string]string) *httptest.ResponseRecorder {
@@ -95,18 +96,19 @@ func TestUnknownRoutes_ReturnPlainText404(t *testing.T) {
 func TestRequestLogging_LogsIncomingAndCompleted(t *testing.T) {
 	router, out := newRouter()
 
-	do(t, router, http.MethodPost, "/speak?x=1", map[string]string{"X-Request-Id": "abc"})
+	do(t, router, http.MethodPost, "/other?x=1", map[string]string{"X-Request-Id": "abc"})
 	lines := logLines(t, out)
 
 	require.Len(t, lines, 2)
-	assert.Equal(t, "Incoming POST /speak?x=1", lines[0]["message"])
+	assert.Equal(t, "Incoming POST /other?x=1", lines[0]["message"])
 	assert.Equal(t, "HttpMiddleware", lines[0]["context"])
 	assert.Equal(t, "POST", lines[0]["method"])
-	assert.Equal(t, "/speak?x=1", lines[0]["url"])
+	assert.Equal(t, "/other?x=1", lines[0]["url"])
 	assert.Equal(t, map[string]any{"X-Request-Id": []any{"abc"}}, lines[0]["headers"])
-	assert.Equal(t, "Completed POST /speak?x=1", lines[1]["message"])
+	assert.Equal(t, "Completed POST /other?x=1", lines[1]["message"])
 	assert.InDelta(t, http.StatusNotFound, lines[1]["statusCode"], 0)
 	assert.Contains(t, lines[1], "duration")
+	assert.Equal(t, false, lines[1]["aborted"])
 }
 
 func TestRequestLogging_RedactsSecretHeaders(t *testing.T) {
