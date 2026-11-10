@@ -64,7 +64,7 @@ services:
       - 15672:15672
       - 15692:15692 # Prometheus metrics endpoint
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_listener", "5672"]
       interval: 5s
       timeout: 5s
       retries: 12
