@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf8" />
+  <title>Piper TTS REST API</title>
+  <!-- needed for adaptive design -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      padding: 0;
+      margin: 0;
+    }
+  </style>
+  <script src="https://cdn.redocly.com/redoc/v2.5.3/bundles/redoc.standalone.js"></script><style data-styled="true" data-styled-version="6.5.3">.gVqSrK{width:calc(100% - 40%);padding:0 40px;}/*!sc*/
+@media print,screen and (max-width: 75rem){.gVqSrK{width:100%;padding:40px 40px;}}/*!sc*/
+data-styled.g5[id="sc-hKwBjT"]{content:"gVqSrK,"}/*!sc*/
+.jVjTxq{padding:40px 0;}/*!sc*/
+.jVjTxq:last-child{min-height:calc(100vh + 1px);}/*!sc*/
+.jVjTxq>.jVjTxq:last-child{min-height:initial;}/*!sc*/
+@media print,screen and (max-width: 75rem){.jVjTxq{padding:0;}}/*!sc*/
+.fwcblJ{padding:40px 0;position:relative;}/*!sc*/
+.fwcblJ:last-child{min-height:calc(100vh + 1px);}/*!sc*/
+.fwcblJ>.fwcblJ:last-child{min-height:initial;}/*!sc*/
+@media print,screen and (max-width: 75rem){.fwcblJ{padding:0;}}/*!sc*/
+.fwcblJ:not(:last-of-type):after{position:absolute;bottom:0;width:100%;display:block;content:'';border-bottom:1px solid rgba(0, 0, 0, 0.2);}/*!sc*/
+data-styled.g6[id="sc-eCIkAO"]{content:"jVjTxq,fwcblJ,"}/*!sc*/
+.eMcwSW{width:40%;color:#ffffff;background-color:#263238;padding:0 40px;}/*!sc*/
+@media print,screen and (max-width: 75rem){.eMcwSW{width:100%;padding:40px 40px;}}/*!sc*/
+data-styled.g7[id="sc-jRQBiJ"]{content:"eMcwSW,"}/*!sc*/
+.hCcvSb{background-color:#263238;}/*!sc*/
+data-styled.g8[id="sc-gKckzE"]{content:"hCcvSb,"}/*!sc*/
+.gBxmSK{display:flex;width:100%;padding:0;}/*!sc*/
+@media print,screen and (max-width: 75rem){.gBxmSK{flex-direction:column;}}/*!sc*/
+data-styled.g9[id="sc-iCfNyT"]{content:"gBxmSK,"}/*!sc*/
+.cTSqwK{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.85714em;line-height:1.6em;color:#e5e5e5;}/*!sc*/
+data-styled.g10[id="sc-furwPO"]{content:"cTSqwK,"}/*!sc*/
+.bSqaeF{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.57143em;line-height:1.6em;color:#e5e5e5;margin:0 0 20px;}/*!sc*/
+data-styled.g11[id="sc-pVUti"]{content:"bSqaeF,"}/*!sc*/
+.eLZTZJ{color:#ffffff;}/*!sc*/
+data-styled.g13[id="sc-kDTkBQ"]{content:"eLZTZJ,"}/*!sc*/
+.DLudH{border-bottom:1px solid rgba(38, 50, 56, 0.3);margin:1em 0 1em 0;color:rgba(38, 50, 56, 0.5);font-weight:normal;text-transform:uppercase;font-size:0.929em;line-height:20px;}/*!sc*/
+data-styled.g14[id="sc-iqsgXZ"]{content:"DLudH,"}/*!sc*/
+.bVILEW{cursor:pointer;margin-left:-20px;padding:0;line-height:1;width:20px;display:inline-block;outline:0;}/*!sc*/
+.bVILEW:before{content:'';width:15px;height:15px;background-size:contain;background-image:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgeD0iMCIgeT0iMCIgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCA1MTIgNTEyIiB4bWw6c3BhY2U9InByZXNlcnZlIj48cGF0aCBmaWxsPSIjMDEwMTAxIiBkPSJNNDU5LjcgMjMzLjRsLTkwLjUgOTAuNWMtNTAgNTAtMTMxIDUwLTE4MSAwIC03LjktNy44LTE0LTE2LjctMTkuNC0yNS44bDQyLjEtNDIuMWMyLTIgNC41LTMuMiA2LjgtNC41IDIuOSA5LjkgOCAxOS4zIDE1LjggMjcuMiAyNSAyNSA2NS42IDI0LjkgOTAuNSAwbDkwLjUtOTAuNWMyNS0yNSAyNS02NS42IDAtOTAuNSAtMjQuOS0yNS02NS41LTI1LTkwLjUgMGwtMzIuMiAzMi4yYy0yNi4xLTEwLjItNTQuMi0xMi45LTgxLjYtOC45bDY4LjYtNjguNmM1MC01MCAxMzEtNTAgMTgxIDBDNTA5LjYgMTAyLjMgNTA5LjYgMTgzLjQgNDU5LjcgMjMzLjR6TTIyMC4zIDM4Mi4ybC0zMi4yIDMyLjJjLTI1IDI0LjktNjUuNiAyNC45LTkwLjUgMCAtMjUtMjUtMjUtNjUuNiAwLTkwLjVsOTAuNS05MC41YzI1LTI1IDY1LjUtMjUgOTAuNSAwIDcuOCA3LjggMTIuOSAxNy4yIDE1LjggMjcuMSAyLjQtMS40IDQuOC0yLjUgNi44LTQuNWw0Mi4xLTQyYy01LjQtOS4yLTExLjYtMTgtMTkuNC0yNS44IC01MC01MC0xMzEtNTAtMTgxIDBsLTkwLjUgOTAuNWMtNTAgNTAtNTAgMTMxIDAgMTgxIDUwIDUwIDEzMSA1MCAxODEgMGw2OC42LTY4LjZDMjc0LjYgMzk1LjEgMjQ2LjQgMzkyLjMgMjIwLjMgMzgyLjJ6Ii8+PC9zdmc+Cg==');opacity:0.5;visibility:hidden;display:inline-block;vertical-align:middle;}/*!sc*/
+h1:hover>.bVILEW::before,h2:hover>.bVILEW::before,.bVILEW:hover::before{visibility:visible;}/*!sc*/
+data-styled.g15[id="sc-crHjOq"]{content:"bVILEW,"}/*!sc*/
+.enbFWE{height:18px;width:18px;min-width:18px;vertical-align:middle;float:right;transition:transform 0.2s ease-out;transform:rotateZ(-90deg);}/*!sc*/
+.ixKnVW{height:1.5em;width:1.5em;min-width:1.5em;vertical-align:middle;float:left;transition:transform 0.2s ease-out;transform:rotateZ(-90deg);}/*!sc*/
+.ixKnVW polygon{fill:#1d8127;}/*!sc*/
+.kNOxeG{height:1.5em;width:1.5em;min-width:1.5em;vertical-align:middle;float:left;transition:transform 0.2s ease-out;transform:rotateZ(-90deg);}/*!sc*/
+.kNOxeG polygon{fill:#d41f1c;}/*!sc*/
+.dSdygy{height:20px;width:20px;min-width:20px;vertical-align:middle;float:right;transition:transform 0.2s ease-out;transform:rotateZ(0);}/*!sc*/
+.dSdygy polygon{fill:white;}/*!sc*/
+data-styled.g16[id="sc-eggkz"]{content:"enbFWE,ixKnVW,kNOxeG,dSdygy,"}/*!sc*/
+.bCKJJC{border-left:1px solid #c9def7;box-sizing:border-box;position:relative;padding:10px 10px 10px 0;}/*!sc*/
+@media screen and (max-width: 50rem){.bCKJJC{display:block;overflow:hidden;}}/*!sc*/
+tr:first-of-type>.bCKJJC,tr.last>.bCKJJC{border-left-width:0;background-position:top left;background-repeat:no-repeat;background-size:1px 100%;}/*!sc*/
+tr:first-of-type>.bCKJJC{background-image:linear-gradient(
+      to bottom,
+      transparent 0%,
+      transparent 22px,
+      #c9def7 22px,
+      #c9def7 100%
+    );}/*!sc*/
+tr.last>.bCKJJC{background-image:linear-gradient(
+      to bottom,
+      #c9def7 0%,
+      #c9def7 22px,
+      transparent 22px,
+      transparent 100%
+    );}/*!sc*/
+tr.last+tr>.bCKJJC{border-left-color:transparent;}/*!sc*/
+tr.last:first-child>.bCKJJC{background:none;border-left-color:transparent;}/*!sc*/
+data-styled.g19[id="sc-hBUSYK"]{content:"bCKJJC,"}/*!sc*/
+.ieQgBm{vertical-align:top;line-height:20px;white-space:nowrap;font-size:13px;font-family:Courier,monospace;}/*!sc*/
+.ieQgBm.deprecated{text-decoration:line-through;color:#707070;}/*!sc*/
+data-styled.g21[id="sc-fFelbd"]{content:"ieQgBm,"}/*!sc*/
+.bgyXij{border-bottom:1px solid #9fb4be;padding:10px 0;width:75%;box-sizing:border-box;}/*!sc*/
+tr.expanded .bgyXij{border-bottom:none;}/*!sc*/
+@media screen and (max-width: 50rem){.bgyXij{padding:0 20px;border-bottom:none;border-left:1px solid #c9def7;}tr.last>.bgyXij{border-left:none;}}/*!sc*/
+data-styled.g22[id="sc-bkkgYE"]{content:"bgyXij,"}/*!sc*/
+.fgKOFl{color:#c9def7;font-family:Courier,monospace;margin-right:10px;}/*!sc*/
+.fgKOFl::before{content:'';display:inline-block;vertical-align:middle;width:10px;height:1px;background:#c9def7;}/*!sc*/
+.fgKOFl::after{content:'';display:inline-block;vertical-align:middle;width:1px;background:#c9def7;height:7px;}/*!sc*/
+data-styled.g23[id="sc-ieedpP"]{content:"fgKOFl,"}/*!sc*/
+.ThvSP{border-collapse:separate;border-radius:3px;font-size:14px;border-spacing:0;width:100%;}/*!sc*/
+.ThvSP >tr{vertical-align:middle;}/*!sc*/
+@media screen and (max-width: 50rem){.ThvSP{display:block;}.ThvSP >tr,.ThvSP >tbody>tr{display:block;}}/*!sc*/
+@media screen and (max-width: 50rem) and (-ms-high-contrast:none){.ThvSP td{float:left;width:100%;}}/*!sc*/
+.ThvSP .sc-dJjZnq,.ThvSP .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq,.ThvSP .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq{margin:1em;margin-right:0;background:#1a1a1a;}/*!sc*/
+.ThvSP .sc-dJjZnq .sc-dJjZnq,.ThvSP .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq,.ThvSP .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq .sc-dJjZnq{background:#ffffff;}/*!sc*/
+data-styled.g25[id="sc-hGPAwl"]{content:"ThvSP,"}/*!sc*/
+.gYefmQ >ul{list-style:none;padding:0;margin:0;margin:0 -5px;}/*!sc*/
+.gYefmQ >ul >li{padding:5px 10px;display:inline-block;background-color:#11171a;border-bottom:1px solid rgba(0, 0, 0, 0.5);cursor:pointer;text-align:center;outline:none;color:#ccc;margin:0 5px 5px 5px;border:1px solid #07090b;border-radius:5px;min-width:60px;font-size:0.9em;font-weight:bold;}/*!sc*/
+.gYefmQ >ul >li.react-tabs__tab--selected{color:#e5e5e5;background:#ffffff;}/*!sc*/
+.gYefmQ >ul >li.react-tabs__tab--selected:focus{outline:auto;}/*!sc*/
+.gYefmQ >ul >li:only-child{flex:none;min-width:100px;}/*!sc*/
+.gYefmQ >ul >li.tab-success{color:#1d8127;}/*!sc*/
+.gYefmQ >ul >li.tab-redirect{color:#ffa500;}/*!sc*/
+.gYefmQ >ul >li.tab-info{color:#87ceeb;}/*!sc*/
+.gYefmQ >ul >li.tab-error{color:#d41f1c;}/*!sc*/
+.gYefmQ >.react-tabs__tab-panel{background:#11171a;}/*!sc*/
+.gYefmQ >.react-tabs__tab-panel>div,.gYefmQ >.react-tabs__tab-panel>pre{padding:20px;margin:0;}/*!sc*/
+.gYefmQ >.react-tabs__tab-panel>div>pre{padding:0;}/*!sc*/
+data-styled.g31[id="sc-cxpUrY"]{content:"gYefmQ,"}/*!sc*/
+.cJMweq code[class*='language-'],.cJMweq pre[class*='language-']{text-shadow:0 -0.1em 0.2em black;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.5;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none;}/*!sc*/
+@media print{.cJMweq code[class*='language-'],.cJMweq pre[class*='language-']{text-shadow:none;}}/*!sc*/
+.cJMweq pre[class*='language-']{padding:1em;margin:0.5em 0;overflow:auto;}/*!sc*/
+.cJMweq .token.comment,.cJMweq .token.prolog,.cJMweq .token.doctype,.cJMweq .token.cdata{color:hsl(30, 20%, 50%);}/*!sc*/
+.cJMweq .token.punctuation{opacity:0.7;}/*!sc*/
+.cJMweq .namespace{opacity:0.7;}/*!sc*/
+.cJMweq .token.property,.cJMweq .token.tag,.cJMweq .token.number,.cJMweq .token.constant,.cJMweq .token.symbol{color:#4a8bb3;}/*!sc*/
+.cJMweq .token.boolean{color:#e64441;}/*!sc*/
+.cJMweq .token.selector,.cJMweq .token.attr-name,.cJMweq .token.string,.cJMweq .token.char,.cJMweq .token.builtin,.cJMweq .token.inserted{color:#a0fbaa;}/*!sc*/
+.cJMweq .token.selector+a,.cJMweq .token.attr-name+a,.cJMweq .token.string+a,.cJMweq .token.char+a,.cJMweq .token.builtin+a,.cJMweq .token.inserted+a,.cJMweq .token.selector+a:visited,.cJMweq .token.attr-name+a:visited,.cJMweq .token.string+a:visited,.cJMweq .token.char+a:visited,.cJMweq .token.builtin+a:visited,.cJMweq .token.inserted+a:visited{color:#4ed2ba;text-decoration:underline;}/*!sc*/
+.cJMweq .token.property.string{color:white;}/*!sc*/
+.cJMweq .token.operator,.cJMweq .token.entity,.cJMweq .token.url,.cJMweq .token.variable{color:hsl(40, 90%, 60%);}/*!sc*/
+.cJMweq .token.atrule,.cJMweq .token.attr-value,.cJMweq .token.keyword{color:hsl(350, 40%, 70%);}/*!sc*/
+.cJMweq .token.regex,.cJMweq .token.important{color:#e90;}/*!sc*/
+.cJMweq .token.important,.cJMweq .token.bold{font-weight:bold;}/*!sc*/
+.cJMweq .token.italic{font-style:italic;}/*!sc*/
+.cJMweq .token.entity{cursor:help;}/*!sc*/
+.cJMweq .token.deleted{color:red;}/*!sc*/
+data-styled.g33[id="sc-iJKPHa"]{content:"cJMweq,"}/*!sc*/
+.gwYevq{opacity:0.7;transition:opacity 0.3s ease;text-align:right;}/*!sc*/
+.gwYevq:focus-within{opacity:1;}/*!sc*/
+.gwYevq >button{background-color:transparent;border:0;color:inherit;padding:2px 10px;font-family:Roboto,sans-serif;font-size:14px;line-height:1.5em;cursor:pointer;outline:0;}/*!sc*/
+.gwYevq >button :hover,.gwYevq >button :focus{background:rgba(255, 255, 255, 0.1);}/*!sc*/
+data-styled.g34[id="sc-giYgZj"]{content:"gwYevq,"}/*!sc*/
+.dUzxWi{position:relative;}/*!sc*/
+data-styled.g38[id="sc-kLwfci"]{content:"dUzxWi,"}/*!sc*/
+.fGTgWG{position:absolute;pointer-events:none;z-index:1;top:50%;-webkit-transform:translateY(-50%);-ms-transform:translateY(-50%);transform:translateY(-50%);right:8px;margin:auto;text-align:center;}/*!sc*/
+.jhBcp{position:absolute;pointer-events:none;z-index:1;top:50%;-webkit-transform:translateY(-50%);-ms-transform:translateY(-50%);transform:translateY(-50%);right:8px;margin:auto;text-align:center;}/*!sc*/
+.jhBcp polyline{color:white;}/*!sc*/
+data-styled.g39[id="sc-ikJwur"]{content:"fGTgWG,jhBcp,"}/*!sc*/
+.bHzIcc{box-sizing:border-box;min-width:100px;outline:none;display:inline-block;border-radius:2px;border:1px solid rgba(38, 50, 56, 0.5);vertical-align:bottom;padding:2px 0px 2px 6px;position:relative;width:auto;background:white;color:#263238;font-family:Montserrat,sans-serif;font-size:0.929em;line-height:1.5em;cursor:pointer;transition:border 0.25s ease,color 0.25s ease,box-shadow 0.25s ease;}/*!sc*/
+.bHzIcc label{box-sizing:border-box;min-width:100px;outline:none;display:inline-block;font-family:Montserrat,sans-serif;color:#e5e5e5;vertical-align:bottom;width:auto;text-transform:none;padding:0 22px 0 4px;font-size:0.929em;line-height:1.5em;font-family:inherit;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}/*!sc*/
+.bHzIcc .dropdown-select{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;border:none;appearance:none;cursor:pointer;color:#e5e5e5;line-height:inherit;font-family:inherit;}/*!sc*/
+.bHzIcc:hover,.bHzIcc:focus-within{border:1px solid #60a5fa;color:#60a5fa;box-shadow:0px 0px 0px 1px #60a5fa;}/*!sc*/
+data-styled.g40[id="sc-jJoSXA"]{content:"bHzIcc,"}/*!sc*/
+.ktIGpr{margin-left:10px;text-transform:none;font-size:0.969em;font-size:1em;border:none;padding:0 1.2em 0 0;background:transparent;}/*!sc*/
+.ktIGpr:hover,.ktIGpr:focus-within{border:none;box-shadow:none;}/*!sc*/
+.ktIGpr:hover label,.ktIGpr:focus-within label{color:#60a5fa;text-shadow:0px 0px 0px #60a5fa;}/*!sc*/
+data-styled.g41[id="sc-hiCkpJ"]{content:"ktIGpr,"}/*!sc*/
+.kNPqqp{margin-left:10px;text-transform:none;font-size:0.929em;color:black;}/*!sc*/
+data-styled.g42[id="sc-gWWZvT"]{content:"kNPqqp,"}/*!sc*/
+.jLlVkR{font-family:Roboto,sans-serif;font-weight:400;line-height:1.5em;}/*!sc*/
+.jLlVkR p:last-child{margin-bottom:0;}/*!sc*/
+.jLlVkR h1{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.85714em;line-height:1.6em;color:#60a5fa;margin-top:0;}/*!sc*/
+.jLlVkR h2{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.57143em;line-height:1.6em;color:#e5e5e5;}/*!sc*/
+.jLlVkR code{color:#ff8a80;background-color:rgba(255,255,255,0.08);font-family:Courier,monospace;border-radius:2px;border:1px solid rgba(38, 50, 56, 0.1);padding:0 5px;font-size:13px;font-weight:400;word-break:break-word;}/*!sc*/
+.jLlVkR pre{font-family:Courier,monospace;white-space:pre;background-color:#11171a;color:white;padding:20px;overflow-x:auto;line-height:normal;border-radius:0;border:1px solid rgba(38, 50, 56, 0.1);}/*!sc*/
+.jLlVkR pre code{background-color:transparent;color:white;padding:0;}/*!sc*/
+.jLlVkR pre code:before,.jLlVkR pre code:after{content:none;}/*!sc*/
+.jLlVkR blockquote{margin:0;margin-bottom:1em;padding:0 15px;color:#777;border-left:4px solid #ddd;}/*!sc*/
+.jLlVkR img{max-width:100%;box-sizing:content-box;}/*!sc*/
+.jLlVkR ul,.jLlVkR ol{padding-left:2em;margin:0;margin-bottom:1em;}/*!sc*/
+.jLlVkR ul ul,.jLlVkR ol ul,.jLlVkR ul ol,.jLlVkR ol ol{margin-bottom:0;margin-top:0;}/*!sc*/
+.jLlVkR table{display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all;border-collapse:collapse;border-spacing:0;margin-top:1.5em;margin-bottom:1.5em;}/*!sc*/
+.jLlVkR table tr{background-color:#fff;border-top:1px solid #ccc;}/*!sc*/
+.jLlVkR table tr:nth-child(2n){background-color:#1a1a1a;}/*!sc*/
+.jLlVkR table th,.jLlVkR table td{padding:6px 13px;border:1px solid #ddd;}/*!sc*/
+.jLlVkR table th{text-align:left;font-weight:bold;}/*!sc*/
+.jLlVkR .share-link{cursor:pointer;margin-left:-20px;padding:0;line-height:1;width:20px;display:inline-block;outline:0;}/*!sc*/
+.jLlVkR .share-link:before{content:'';width:15px;height:15px;background-size:contain;background-image:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgeD0iMCIgeT0iMCIgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCA1MTIgNTEyIiB4bWw6c3BhY2U9InByZXNlcnZlIj48cGF0aCBmaWxsPSIjMDEwMTAxIiBkPSJNNDU5LjcgMjMzLjRsLTkwLjUgOTAuNWMtNTAgNTAtMTMxIDUwLTE4MSAwIC03LjktNy44LTE0LTE2LjctMTkuNC0yNS44bDQyLjEtNDIuMWMyLTIgNC41LTMuMiA2LjgtNC41IDIuOSA5LjkgOCAxOS4zIDE1LjggMjcuMiAyNSAyNSA2NS42IDI0LjkgOTAuNSAwbDkwLjUtOTAuNWMyNS0yNSAyNS02NS42IDAtOTAuNSAtMjQuOS0yNS02NS41LTI1LTkwLjUgMGwtMzIuMiAzMi4yYy0yNi4xLTEwLjItNTQuMi0xMi45LTgxLjYtOC45bDY4LjYtNjguNmM1MC01MCAxMzEtNTAgMTgxIDBDNTA5LjYgMTAyLjMgNTA5LjYgMTgzLjQgNDU5LjcgMjMzLjR6TTIyMC4zIDM4Mi4ybC0zMi4yIDMyLjJjLTI1IDI0LjktNjUuNiAyNC45LTkwLjUgMCAtMjUtMjUtMjUtNjUuNiAwLTkwLjVsOTAuNS05MC41YzI1LTI1IDY1LjUtMjUgOTAuNSAwIDcuOCA3LjggMTIuOSAxNy4yIDE1LjggMjcuMSAyLjQtMS40IDQuOC0yLjUgNi44LTQuNWw0Mi4xLTQyYy01LjQtOS4yLTExLjYtMTgtMTkuNC0yNS44IC01MC01MC0xMzEtNTAtMTgxIDBsLTkwLjUgOTAuNWMtNTAgNTAtNTAgMTMxIDAgMTgxIDUwIDUwIDEzMSA1MCAxODEgMGw2OC42LTY4LjZDMjc0LjYgMzk1LjEgMjQ2LjQgMzkyLjMgMjIwLjMgMzgyLjJ6Ii8+PC9zdmc+Cg==');opacity:0.5;visibility:hidden;display:inline-block;vertical-align:middle;}/*!sc*/
+.jLlVkR h1:hover>.share-link::before,.jLlVkR h2:hover>.share-link::before,.jLlVkR .share-link:hover::before{visibility:visible;}/*!sc*/
+.jLlVkR a{text-decoration:auto;color:#60a5fa;}/*!sc*/
+.jLlVkR a:visited{color:#60a5fa;}/*!sc*/
+.jLlVkR a:hover{color:#c3ddfd;text-decoration:auto;}/*!sc*/
+.cOozNb{font-family:Roboto,sans-serif;font-weight:400;line-height:1.5em;}/*!sc*/
+.cOozNb p:last-child{margin-bottom:0;}/*!sc*/
+.cOozNb p:first-child{margin-top:0;}/*!sc*/
+.cOozNb p:last-child{margin-bottom:0;}/*!sc*/
+.cOozNb p{display:inline-block;}/*!sc*/
+.cOozNb h1{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.85714em;line-height:1.6em;color:#60a5fa;margin-top:0;}/*!sc*/
+.cOozNb h2{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.57143em;line-height:1.6em;color:#e5e5e5;}/*!sc*/
+.cOozNb code{color:#ff8a80;background-color:rgba(255,255,255,0.08);font-family:Courier,monospace;border-radius:2px;border:1px solid rgba(38, 50, 56, 0.1);padding:0 5px;font-size:13px;font-weight:400;word-break:break-word;}/*!sc*/
+.cOozNb pre{font-family:Courier,monospace;white-space:pre;background-color:#11171a;color:white;padding:20px;overflow-x:auto;line-height:normal;border-radius:0;border:1px solid rgba(38, 50, 56, 0.1);}/*!sc*/
+.cOozNb pre code{background-color:transparent;color:white;padding:0;}/*!sc*/
+.cOozNb pre code:before,.cOozNb pre code:after{content:none;}/*!sc*/
+.cOozNb blockquote{margin:0;margin-bottom:1em;padding:0 15px;color:#777;border-left:4px solid #ddd;}/*!sc*/
+.cOozNb img{max-width:100%;box-sizing:content-box;}/*!sc*/
+.cOozNb ul,.cOozNb ol{padding-left:2em;margin:0;margin-bottom:1em;}/*!sc*/
+.cOozNb ul ul,.cOozNb ol ul,.cOozNb ul ol,.cOozNb ol ol{margin-bottom:0;margin-top:0;}/*!sc*/
+.cOozNb table{display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all;border-collapse:collapse;border-spacing:0;margin-top:1.5em;margin-bottom:1.5em;}/*!sc*/
+.cOozNb table tr{background-color:#fff;border-top:1px solid #ccc;}/*!sc*/
+.cOozNb table tr:nth-child(2n){background-color:#1a1a1a;}/*!sc*/
+.cOozNb table th,.cOozNb table td{padding:6px 13px;border:1px solid #ddd;}/*!sc*/
+.cOozNb table th{text-align:left;font-weight:bold;}/*!sc*/
+.cOozNb .share-link{cursor:pointer;margin-left:-20px;padding:0;line-height:1;width:20px;display:inline-block;outline:0;}/*!sc*/
+.cOozNb .share-link:before{content:'';width:15px;height:15px;background-size:contain;background-image:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgeD0iMCIgeT0iMCIgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCA1MTIgNTEyIiB4bWw6c3BhY2U9InByZXNlcnZlIj48cGF0aCBmaWxsPSIjMDEwMTAxIiBkPSJNNDU5LjcgMjMzLjRsLTkwLjUgOTAuNWMtNTAgNTAtMTMxIDUwLTE4MSAwIC03LjktNy44LTE0LTE2LjctMTkuNC0yNS44bDQyLjEtNDIuMWMyLTIgNC41LTMuMiA2LjgtNC41IDIuOSA5LjkgOCAxOS4zIDE1LjggMjcuMiAyNSAyNSA2NS42IDI0LjkgOTAuNSAwbDkwLjUtOTAuNWMyNS0yNSAyNS02NS42IDAtOTAuNSAtMjQuOS0yNS02NS41LTI1LTkwLjUgMGwtMzIuMiAzMi4yYy0yNi4xLTEwLjItNTQuMi0xMi45LTgxLjYtOC45bDY4LjYtNjguNmM1MC01MCAxMzEtNTAgMTgxIDBDNTA5LjYgMTAyLjMgNTA5LjYgMTgzLjQgNDU5LjcgMjMzLjR6TTIyMC4zIDM4Mi4ybC0zMi4yIDMyLjJjLTI1IDI0LjktNjUuNiAyNC45LTkwLjUgMCAtMjUtMjUtMjUtNjUuNiAwLTkwLjVsOTAuNS05MC41YzI1LTI1IDY1LjUtMjUgOTAuNSAwIDcuOCA3LjggMTIuOSAxNy4yIDE1LjggMjcuMSAyLjQtMS40IDQuOC0yLjUgNi44LTQuNWw0Mi4xLTQyYy01LjQtOS4yLTExLjYtMTgtMTkuNC0yNS44IC01MC01MC0xMzEtNTAtMTgxIDBsLTkwLjUgOTAuNWMtNTAgNTAtNTAgMTMxIDAgMTgxIDUwIDUwIDEzMSA1MCAxODEgMGw2OC42LTY4LjZDMjc0LjYgMzk1LjEgMjQ2LjQgMzkyLjMgMjIwLjMgMzgyLjJ6Ii8+PC9zdmc+Cg==');opacity:0.5;visibility:hidden;display:inline-block;vertical-align:middle;}/*!sc*/
+.cOozNb h1:hover>.share-link::before,.cOozNb h2:hover>.share-link::before,.cOozNb .share-link:hover::before{visibility:visible;}/*!sc*/
+.cOozNb a{text-decoration:auto;color:#60a5fa;}/*!sc*/
+.cOozNb a:visited{color:#60a5fa;}/*!sc*/
+.cOozNb a:hover{color:#c3ddfd;text-decoration:auto;}/*!sc*/
+.fOWVGn{font-family:Roboto,sans-serif;font-weight:400;line-height:1.5em;}/*!sc*/
+.fOWVGn p:last-child{margin-bottom:0;}/*!sc*/
+.fOWVGn p:first-child{margin-top:0;}/*!sc*/
+.fOWVGn p:last-child{margin-bottom:0;}/*!sc*/
+.fOWVGn h1{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.85714em;line-height:1.6em;color:#60a5fa;margin-top:0;}/*!sc*/
+.fOWVGn h2{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.57143em;line-height:1.6em;color:#e5e5e5;}/*!sc*/
+.fOWVGn code{color:#ff8a80;background-color:rgba(255,255,255,0.08);font-family:Courier,monospace;border-radius:2px;border:1px solid rgba(38, 50, 56, 0.1);padding:0 5px;font-size:13px;font-weight:400;word-break:break-word;}/*!sc*/
+.fOWVGn pre{font-family:Courier,monospace;white-space:pre;background-color:#11171a;color:white;padding:20px;overflow-x:auto;line-height:normal;border-radius:0;border:1px solid rgba(38, 50, 56, 0.1);}/*!sc*/
+.fOWVGn pre code{background-color:transparent;color:white;padding:0;}/*!sc*/
+.fOWVGn pre code:before,.fOWVGn pre code:after{content:none;}/*!sc*/
+.fOWVGn blockquote{margin:0;margin-bottom:1em;padding:0 15px;color:#777;border-left:4px solid #ddd;}/*!sc*/
+.fOWVGn img{max-width:100%;box-sizing:content-box;}/*!sc*/
+.fOWVGn ul,.fOWVGn ol{padding-left:2em;margin:0;margin-bottom:1em;}/*!sc*/
+.fOWVGn ul ul,.fOWVGn ol ul,.fOWVGn ul ol,.fOWVGn ol ol{margin-bottom:0;margin-top:0;}/*!sc*/
+.fOWVGn table{display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all;border-collapse:collapse;border-spacing:0;margin-top:1.5em;margin-bottom:1.5em;}/*!sc*/
+.fOWVGn table tr{background-color:#fff;border-top:1px solid #ccc;}/*!sc*/
+.fOWVGn table tr:nth-child(2n){background-color:#1a1a1a;}/*!sc*/
+.fOWVGn table th,.fOWVGn table td{padding:6px 13px;border:1px solid #ddd;}/*!sc*/
+.fOWVGn table th{text-align:left;font-weight:bold;}/*!sc*/
+.fOWVGn .share-link{cursor:pointer;margin-left:-20px;padding:0;line-height:1;width:20px;display:inline-block;outline:0;}/*!sc*/
+.fOWVGn .share-link:before{content:'';width:15px;height:15px;background-size:contain;background-image:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgeD0iMCIgeT0iMCIgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCA1MTIgNTEyIiB4bWw6c3BhY2U9InByZXNlcnZlIj48cGF0aCBmaWxsPSIjMDEwMTAxIiBkPSJNNDU5LjcgMjMzLjRsLTkwLjUgOTAuNWMtNTAgNTAtMTMxIDUwLTE4MSAwIC03LjktNy44LTE0LTE2LjctMTkuNC0yNS44bDQyLjEtNDIuMWMyLTIgNC41LTMuMiA2LjgtNC41IDIuOSA5LjkgOCAxOS4zIDE1LjggMjcuMiAyNSAyNSA2NS42IDI0LjkgOTAuNSAwbDkwLjUtOTAuNWMyNS0yNSAyNS02NS42IDAtOTAuNSAtMjQuOS0yNS02NS41LTI1LTkwLjUgMGwtMzIuMiAzMi4yYy0yNi4xLTEwLjItNTQuMi0xMi45LTgxLjYtOC45bDY4LjYtNjguNmM1MC01MCAxMzEtNTAgMTgxIDBDNTA5LjYgMTAyLjMgNTA5LjYgMTgzLjQgNDU5LjcgMjMzLjR6TTIyMC4zIDM4Mi4ybC0zMi4yIDMyLjJjLTI1IDI0LjktNjUuNiAyNC45LTkwLjUgMCAtMjUtMjUtMjUtNjUuNiAwLTkwLjVsOTAuNS05MC41YzI1LTI1IDY1LjUtMjUgOTAuNSAwIDcuOCA3LjggMTIuOSAxNy4yIDE1LjggMjcuMSAyLjQtMS40IDQuOC0yLjUgNi44LTQuNWw0Mi4xLTQyYy01LjQtOS4yLTExLjYtMTgtMTkuNC0yNS44IC01MC01MC0xMzEtNTAtMTgxIDBsLTkwLjUgOTAuNWMtNTAgNTAtNTAgMTMxIDAgMTgxIDUwIDUwIDEzMSA1MCAxODEgMGw2OC42LTY4LjZDMjc0LjYgMzk1LjEgMjQ2LjQgMzkyLjMgMjIwLjMgMzgyLjJ6Ii8+PC9zdmc+Cg==');opacity:0.5;visibility:hidden;display:inline-block;vertical-align:middle;}/*!sc*/
+.fOWVGn h1:hover>.share-link::before,.fOWVGn h2:hover>.share-link::before,.fOWVGn .share-link:hover::before{visibility:visible;}/*!sc*/
+.fOWVGn a{text-decoration:auto;color:#60a5fa;}/*!sc*/
+.fOWVGn a:visited{color:#60a5fa;}/*!sc*/
+.fOWVGn a:hover{color:#c3ddfd;text-decoration:auto;}/*!sc*/
+data-styled.g43[id="sc-cCcVtu"]{content:"jLlVkR,cOozNb,fOWVGn,"}/*!sc*/
+.hsJTWw{display:inline;}/*!sc*/
+data-styled.g44[id="sc-cidDfp"]{content:"hsJTWw,"}/*!sc*/
+.jIotxr{position:relative;}/*!sc*/
+data-styled.g45[id="sc-jcFiBM"]{content:"jIotxr,"}/*!sc*/
+.kXuYnm:hover>.sc-giYgZj{opacity:1;}/*!sc*/
+data-styled.g50[id="sc-cTAoCz"]{content:"kXuYnm,"}/*!sc*/
+.fuSywj{font-family:Courier,monospace;font-size:13px;white-space:pre;contain:content;overflow-x:auto;}/*!sc*/
+.fuSywj .redoc-json code>.collapser{display:none;pointer-events:none;}/*!sc*/
+.fuSywj .callback-function{color:gray;}/*!sc*/
+.fuSywj .collapser:after{content:'-';cursor:pointer;}/*!sc*/
+.fuSywj .collapsed>.collapser:after{content:'+';cursor:pointer;}/*!sc*/
+.fuSywj .ellipsis:after{content:' … ';}/*!sc*/
+.fuSywj .collapsible{margin-left:2em;}/*!sc*/
+.fuSywj .hoverable{padding-top:1px;padding-bottom:1px;padding-left:2px;padding-right:2px;border-radius:2px;}/*!sc*/
+.fuSywj .hovered{background-color:rgba(235, 238, 249, 1);}/*!sc*/
+.fuSywj .collapser{background-color:transparent;border:0;color:#fff;font-family:Courier,monospace;font-size:13px;padding-right:6px;padding-left:6px;padding-top:0;padding-bottom:0;display:flex;align-items:center;justify-content:center;width:15px;height:15px;position:absolute;top:4px;left:-1.5em;cursor:default;user-select:none;-webkit-user-select:none;padding:2px;}/*!sc*/
+.fuSywj .collapser:focus{outline-color:#fff;outline-style:dotted;outline-width:1px;}/*!sc*/
+.fuSywj ul{list-style-type:none;padding:0px;margin:0px 0px 0px 26px;}/*!sc*/
+.fuSywj li{position:relative;display:block;}/*!sc*/
+.fuSywj .hoverable{display:inline-block;}/*!sc*/
+.fuSywj .selected{outline-style:solid;outline-width:1px;outline-style:dotted;}/*!sc*/
+.fuSywj .collapsed>.collapsible{display:none;}/*!sc*/
+.fuSywj .ellipsis{display:none;}/*!sc*/
+.fuSywj .collapsed>.ellipsis{display:inherit;}/*!sc*/
+data-styled.g51[id="sc-jObTYW"]{content:"fuSywj,"}/*!sc*/
+.eoIpsO{padding:0.9em;background-color:rgba(38,50,56,0.4);margin:0 0 10px 0;display:block;font-family:Montserrat,sans-serif;font-size:0.929em;line-height:1.5em;}/*!sc*/
+data-styled.g52[id="sc-dPiIMO"]{content:"eoIpsO,"}/*!sc*/
+.cfMJLs{font-family:Montserrat,sans-serif;font-size:12px;position:absolute;z-index:1;top:-11px;left:12px;font-weight:600;color:rgba(255,255,255,0.7);}/*!sc*/
+data-styled.g53[id="sc-bBHFiX"]{content:"cfMJLs,"}/*!sc*/
+.bvzYLa{position:relative;}/*!sc*/
+data-styled.g54[id="sc-cNKpwA"]{content:"bvzYLa,"}/*!sc*/
+.dnfZlI{margin:0 0 10px 0;display:block;background-color:rgba(38,50,56,0.4);border:none;padding:0.9em 1.6em 0.9em 0.9em;box-shadow:none;}/*!sc*/
+.dnfZlI label{color:#ffffff;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;font-size:1em;text-transform:none;border:none;}/*!sc*/
+.dnfZlI:hover,.dnfZlI:focus-within{border:none;box-shadow:none;background-color:rgba(38,50,56,0.7);}/*!sc*/
+data-styled.g55[id="sc-AjlSJ"]{content:"dnfZlI,"}/*!sc*/
+.jWgrtg{margin-top:15px;}/*!sc*/
+data-styled.g57[id="sc-hUpbpP"]{content:"jWgrtg,"}/*!sc*/
+.kfcLvW{vertical-align:middle;font-size:13px;line-height:20px;}/*!sc*/
+data-styled.g59[id="sc-gSQHZB"]{content:"kfcLvW,"}/*!sc*/
+.eQjJe{color:rgba(163,163,163,0.9);}/*!sc*/
+data-styled.g60[id="sc-lbhHsq"]{content:"eQjJe,"}/*!sc*/
+.cVYrUm{color:#a3a3a3;}/*!sc*/
+data-styled.g61[id="sc-iNGDOz"]{content:"cVYrUm,"}/*!sc*/
+.fHrDUA{color:#d41f1c;font-size:0.9em;font-weight:normal;margin-left:20px;line-height:1;}/*!sc*/
+data-styled.g63[id="sc-eJwVsk"]{content:"fHrDUA,"}/*!sc*/
+.ecXTRB{color:#0e7c86;font-family:Courier,monospace;font-size:12px;}/*!sc*/
+.ecXTRB::before,.ecXTRB::after{content:' ';}/*!sc*/
+data-styled.g66[id="sc-ehCMcF"]{content:"ecXTRB,"}/*!sc*/
+.cpbvgY{margin-top:0;margin-bottom:0.5em;}/*!sc*/
+data-styled.g93[id="sc-ctqRxX"]{content:"cpbvgY,"}/*!sc*/
+.cJkuz{width:9ex;display:inline-block;height:13px;line-height:13px;background-color:#333;border-radius:3px;background-repeat:no-repeat;background-position:6px 4px;font-size:7px;font-family:Verdana,sans-serif;color:white;text-transform:uppercase;text-align:center;font-weight:bold;vertical-align:middle;margin-right:6px;margin-top:2px;}/*!sc*/
+.cJkuz.get{background-color:#2F8132;}/*!sc*/
+.cJkuz.post{background-color:#186FAF;}/*!sc*/
+.cJkuz.put{background-color:#95507c;}/*!sc*/
+.cJkuz.options{background-color:#947014;}/*!sc*/
+.cJkuz.patch{background-color:#bf581d;}/*!sc*/
+.cJkuz.delete{background-color:#cc3333;}/*!sc*/
+.cJkuz.basic{background-color:#707070;}/*!sc*/
+.cJkuz.link{background-color:#07818F;}/*!sc*/
+.cJkuz.head{background-color:#A23DAD;}/*!sc*/
+.cJkuz.hook{background-color:#60a5fa;}/*!sc*/
+.cJkuz.schema{background-color:#707070;}/*!sc*/
+data-styled.g101[id="sc-XxOMn"]{content:"cJkuz,"}/*!sc*/
+.cDvNBV{margin:0;padding:0;}/*!sc*/
+.cDvNBV:first-child{padding-bottom:32px;}/*!sc*/
+.sc-ilfuVi .sc-ilfuVi{font-size:0.929em;}/*!sc*/
+.fmBIVE{margin:0;padding:0;display:none;}/*!sc*/
+.fmBIVE:first-child{padding-bottom:32px;}/*!sc*/
+.sc-ilfuVi .sc-ilfuVi{font-size:0.929em;}/*!sc*/
+data-styled.g102[id="sc-ilfuVi"]{content:"cDvNBV,fmBIVE,"}/*!sc*/
+.kUnzkJ{list-style:none inside none;overflow:hidden;text-overflow:ellipsis;padding:0;}/*!sc*/
+data-styled.g103[id="sc-uokuf"]{content:"kUnzkJ,"}/*!sc*/
+.jlwmbH{cursor:pointer;color:#e5e5e5;margin:0;padding:12.5px 20px;display:flex;justify-content:space-between;font-family:Montserrat,sans-serif;font-size:0.929em;text-transform:none;background-color:#171717;}/*!sc*/
+.jlwmbH:hover{color:#e5e5e5;background-color:#000;}/*!sc*/
+.jlwmbH .sc-eggkz{height:1.5em;width:1.5em;}/*!sc*/
+.jlwmbH .sc-eggkz polygon{fill:#e5e5e5;}/*!sc*/
+.cIYDfd{cursor:pointer;color:#e5e5e5;margin:0;padding:12.5px 20px;display:flex;justify-content:space-between;font-family:Montserrat,sans-serif;background-color:#171717;}/*!sc*/
+.cIYDfd:hover{color:#e5e5e5;background-color:#0a0a0a;}/*!sc*/
+.cIYDfd .sc-eggkz{height:1.5em;width:1.5em;}/*!sc*/
+.cIYDfd .sc-eggkz polygon{fill:#e5e5e5;}/*!sc*/
+data-styled.g104[id="sc-bilAXc"]{content:"jlwmbH,cIYDfd,"}/*!sc*/
+.eTOOjH{display:inline-block;vertical-align:middle;width:calc(100% - 38px);overflow:hidden;text-overflow:ellipsis;}/*!sc*/
+data-styled.g105[id="sc-eGPZUV"]{content:"eTOOjH,"}/*!sc*/
+.jebarZ{font-size:0.8em;margin-top:10px;text-align:center;position:fixed;width:260px;bottom:0;background:#171717;}/*!sc*/
+.jebarZ a,.jebarZ a:visited,.jebarZ a:hover{color:#e5e5e5!important;padding:5px 0;border-top:1px solid #000;text-decoration:none;display:flex;align-items:center;justify-content:center;}/*!sc*/
+.jebarZ img{width:15px;margin-right:5px;}/*!sc*/
+@media screen and (max-width: 50rem){.jebarZ{width:100%;}}/*!sc*/
+data-styled.g106[id="sc-hAcEkO"]{content:"jebarZ,"}/*!sc*/
+.cElpTj{cursor:pointer;position:relative;margin-bottom:5px;}/*!sc*/
+data-styled.g112[id="sc-fXErrr"]{content:"cElpTj,"}/*!sc*/
+.bwtbsK{font-family:Courier,monospace;margin-left:10px;flex:1;overflow-x:hidden;text-overflow:ellipsis;}/*!sc*/
+data-styled.g113[id="sc-FNYFi"]{content:"bwtbsK,"}/*!sc*/
+.ha-DFEV{outline:0;color:inherit;width:100%;text-align:left;cursor:pointer;padding:10px 30px 10px 20px;border-radius:4px 4px 0 0;background-color:#11171a;display:flex;white-space:nowrap;align-items:center;border:1px solid transparent;border-bottom:0;transition:border-color 0.25s ease;}/*!sc*/
+.ha-DFEV ..sc-FNYFi{color:#ffffff;}/*!sc*/
+.ha-DFEV:focus{box-shadow:inset 0 2px 2px rgba(0, 0, 0, 0.45),0 2px 0 rgba(128, 128, 128, 0.25);}/*!sc*/
+data-styled.g114[id="sc-jWUBOh"]{content:"ha-DFEV,"}/*!sc*/
+.iVXwLo{font-size:0.929em;line-height:20px;background-color:#2F8132;color:#ffffff;padding:3px 10px;text-transform:uppercase;font-family:Montserrat,sans-serif;margin:0;}/*!sc*/
+.eQMCLm{font-size:0.929em;line-height:20px;background-color:#186FAF;color:#ffffff;padding:3px 10px;text-transform:uppercase;font-family:Montserrat,sans-serif;margin:0;}/*!sc*/
+data-styled.g115[id="sc-eFejbY"]{content:"iVXwLo,eQMCLm,"}/*!sc*/
+.kwmlAj{position:absolute;width:100%;z-index:100;background:#fafafa;color:#263238;box-sizing:border-box;box-shadow:0 0 6px rgba(0, 0, 0, 0.33);overflow:hidden;border-bottom-left-radius:4px;border-bottom-right-radius:4px;transition:all 0.25s ease;visibility:hidden;transform:translateY(-50%) scaleY(0);}/*!sc*/
+data-styled.g116[id="sc-fmBAGX"]{content:"kwmlAj,"}/*!sc*/
+.bQvhWS{padding:10px;}/*!sc*/
+data-styled.g117[id="sc-lkgRtK"]{content:"bQvhWS,"}/*!sc*/
+.iWvBOX{padding:5px;border:1px solid #ccc;background:#fff;word-break:break-all;color:#60a5fa;}/*!sc*/
+.iWvBOX >span{color:#e5e5e5;}/*!sc*/
+data-styled.g118[id="sc-jlRLdN"]{content:"iWvBOX,"}/*!sc*/
+.bFRAqt{text-transform:lowercase;margin-left:0;line-height:1.5em;}/*!sc*/
+data-styled.g119[id="sc-dUbsrE"]{content:"bFRAqt,"}/*!sc*/
+.bSJJYM{display:block;border:0;width:100%;text-align:left;padding:10px;border-radius:2px;margin-bottom:4px;line-height:1.5em;cursor:pointer;color:#1d8127;background-color:rgba(29,129,39,0.07);}/*!sc*/
+.bSJJYM:focus{outline:auto #1d8127;}/*!sc*/
+.gZwrni{display:block;border:0;width:100%;text-align:left;padding:10px;border-radius:2px;margin-bottom:4px;line-height:1.5em;cursor:pointer;color:#d41f1c;background-color:rgba(212,31,28,0.07);}/*!sc*/
+.gZwrni:focus{outline:auto #d41f1c;}/*!sc*/
+data-styled.g121[id="sc-cbTzWS"]{content:"bSJJYM,gZwrni,"}/*!sc*/
+.esNchU{vertical-align:top;}/*!sc*/
+data-styled.g124[id="sc-fXeXnG"]{content:"esNchU,"}/*!sc*/
+.jIDXCX{font-size:1.3em;padding:0.2em 0;margin:3em 0 1.1em;color:#e5e5e5;font-weight:normal;}/*!sc*/
+data-styled.g125[id="sc-fIotlj"]{content:"jIDXCX,"}/*!sc*/
+.fpckeD{margin-bottom:30px;}/*!sc*/
+data-styled.g130[id="sc-iFMCWE"]{content:"fpckeD,"}/*!sc*/
+.beNWhW{user-select:none;width:20px;height:20px;align-self:center;display:flex;flex-direction:column;color:#60a5fa;}/*!sc*/
+data-styled.g131[id="sc-iqVYUh"]{content:"beNWhW,"}/*!sc*/
+.hcmaLa{width:260px;background-color:#171717;overflow:hidden;display:flex;flex-direction:column;backface-visibility:hidden;height:100vh;position:sticky;position:-webkit-sticky;top:0;}/*!sc*/
+@media screen and (max-width: 50rem){.hcmaLa{position:fixed;z-index:20;width:100%;background:#171717;display:none;}}/*!sc*/
+@media print{.hcmaLa{display:none;}}/*!sc*/
+data-styled.g132[id="sc-eWfYbd"]{content:"hcmaLa,"}/*!sc*/
+.guMoyq{outline:none;user-select:none;background-color:#262626;color:#60a5fa;display:none;cursor:pointer;position:fixed;right:20px;z-index:100;border-radius:50%;box-shadow:0 0 20px rgba(0, 0, 0, 0.3);bottom:44px;width:60px;height:60px;padding:0 20px;}/*!sc*/
+@media screen and (max-width: 50rem){.guMoyq{display:flex;}}/*!sc*/
+.guMoyq svg{color:#60a5fa;}/*!sc*/
+@media print{.guMoyq{display:none;}}/*!sc*/
+data-styled.g133[id="sc-kTLoNQ"]{content:"guMoyq,"}/*!sc*/
+.hvtdIf{font-family:Roboto,sans-serif;font-size:14px;font-weight:400;line-height:1.5em;color:#e5e5e5;display:flex;position:relative;text-align:left;-webkit-font-smoothing:antialiased;font-smoothing:antialiased;text-rendering:optimizeSpeed!important;tap-highlight-color:rgba(0, 0, 0, 0);text-size-adjust:100%;}/*!sc*/
+.hvtdIf *{box-sizing:border-box;-webkit-tap-highlight-color:rgba(255, 255, 255, 0);}/*!sc*/
+data-styled.g134[id="sc-dwsoFP"]{content:"hvtdIf,"}/*!sc*/
+.jKDppt{z-index:1;position:relative;overflow:hidden;width:calc(100% - 260px);contain:layout;}/*!sc*/
+@media print,screen and (max-width: 50rem){.jKDppt{width:100%;}}/*!sc*/
+data-styled.g135[id="sc-jtXFsC"]{content:"jKDppt,"}/*!sc*/
+.erAVi{background:#263238;position:absolute;top:0;bottom:0;right:0;width:calc((100% - 260px) * 0.4);}/*!sc*/
+@media print,screen and (max-width: 75rem){.erAVi{display:none;}}/*!sc*/
+data-styled.g136[id="sc-eldhqJ"]{content:"erAVi,"}/*!sc*/
+.hciFNy{padding:5px 0;}/*!sc*/
+data-styled.g137[id="sc-kiIydw"]{content:"hciFNy,"}/*!sc*/
+.biporZ{width:calc(100% - 40px);box-sizing:border-box;margin:0 20px;padding:5px 10px 5px 20px;border:0;border-bottom:1px solid #313131;font-family:Roboto,sans-serif;font-weight:bold;font-size:13px;color:#e5e5e5;background-color:transparent;outline:none;}/*!sc*/
+data-styled.g138[id="sc-cLpxVv"]{content:"biporZ,"}/*!sc*/
+.dEeoDe{position:absolute;left:20px;height:1.8em;width:0.9em;}/*!sc*/
+.dEeoDe path{fill:#e5e5e5;}/*!sc*/
+data-styled.g139[id="sc-iIUOIi"]{content:"dEeoDe,"}/*!sc*/
+</style>
+  <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
+  <script>window.PIPER_DOCS_VERSION="v5.0.1";</script>
+  <script src="../version-switcher.js" defer></script>
+  <style>html,body{background:#0d0d0d}</style>
+</head>
+
+<body>
+  
+      <div id="redoc"><div class="sc-dwsoFP hvtdIf redoc-wrap"><div class="sc-eWfYbd hcmaLa menu-content" style="top:0px;height:calc(100vh - 0px)"><div role="search" class="sc-kiIydw hciFNy"><svg class="sc-iIUOIi dEeoDe search-icon" version="1.1" viewBox="0 0 1000 1000" x="0px" xmlns="http://www.w3.org/2000/svg" y="0px"><path d="M968.2,849.4L667.3,549c83.9-136.5,66.7-317.4-51.7-435.6C477.1-25,252.5-25,113.9,113.4c-138.5,138.3-138.5,362.6,0,501C219.2,730.1,413.2,743,547.6,666.5l301.9,301.4c43.6,43.6,76.9,14.9,104.2-12.4C981,928.3,1011.8,893,968.2,849.4z M524.5,522c-88.9,88.7-233,88.7-321.8,0c-88.9-88.7-88.9-232.6,0-321.3c88.9-88.7,233-88.7,321.8,0C613.4,289.4,613.4,433.3,524.5,522z"></path></svg><input placeholder="Search..." aria-label="Search" type="text" class="sc-cLpxVv biporZ search-input" value=""/></div><div class="sc-kLwfci dUzxWi scrollbar-container undefined"><ul role="menu" class="sc-ilfuVi cDvNBV"><li tabindex="0" depth="1" data-item-id="tag/Health" role="menuitem" aria-label="Health" aria-expanded="false" class="sc-uokuf kUnzkJ"><label class="sc-bilAXc jlwmbH -depth1"><span width="calc(100% - 38px)" title="Health" class="sc-eGPZUV eTOOjH">Health</span><svg class="sc-eggkz enbFWE" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></label><ul class="sc-ilfuVi fmBIVE"><li tabindex="0" depth="2" data-item-id="tag/Health/operation/health" role="menuitem" aria-label="Health check" aria-expanded="false" class="sc-uokuf kUnzkJ"><label class="sc-bilAXc cIYDfd -depth2"><span type="get" class="sc-XxOMn cJkuz operation-type get">get</span><span tabindex="0" width="calc(100% - 38px)" class="sc-eGPZUV eTOOjH">Health check</span></label></li></ul></li><li tabindex="0" depth="1" data-item-id="tag/Speech" role="menuitem" aria-label="Speech" aria-expanded="false" class="sc-uokuf kUnzkJ"><label class="sc-bilAXc jlwmbH -depth1"><span width="calc(100% - 38px)" title="Speech" class="sc-eGPZUV eTOOjH">Speech</span><svg class="sc-eggkz enbFWE" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></label><ul class="sc-ilfuVi fmBIVE"><li tabindex="0" depth="2" data-item-id="tag/Speech/operation/speak" role="menuitem" aria-label="Synchronous text to speech" aria-expanded="false" class="sc-uokuf kUnzkJ"><label class="sc-bilAXc cIYDfd -depth2"><span type="post" class="sc-XxOMn cJkuz operation-type post">post</span><span tabindex="0" width="calc(100% - 38px)" class="sc-eGPZUV eTOOjH">Synchronous text to speech</span></label></li><li tabindex="0" depth="2" data-item-id="tag/Speech/operation/synthesize" role="menuitem" aria-label="Asynchronous text to speech" aria-expanded="false" class="sc-uokuf kUnzkJ"><label class="sc-bilAXc cIYDfd -depth2"><span type="post" class="sc-XxOMn cJkuz operation-type post">post</span><span tabindex="0" width="calc(100% - 38px)" class="sc-eGPZUV eTOOjH">Asynchronous text to speech</span></label></li></ul></li></ul><div class="sc-hAcEkO jebarZ"><a target="_blank" rel="noopener noreferrer" href="https://redocly.com/redoc/">API docs by Redocly</a></div></div></div><div class="sc-kTLoNQ guMoyq"><div class="sc-iqVYUh beNWhW"><svg class="" style="transform:translate(2px, -4px) rotate(180deg);transition:transform 0.2s ease" viewBox="0 0 926.23699 573.74994" version="1.1" x="0px" y="0px" width="15" height="15"><g transform="translate(904.92214,-879.1482)"><path d="
+          m -673.67664,1221.6502 -231.2455,-231.24803 55.6165,
+          -55.627 c 30.5891,-30.59485 56.1806,-55.627 56.8701,-55.627 0.6894,
+          0 79.8637,78.60862 175.9427,174.68583 l 174.6892,174.6858 174.6892,
+          -174.6858 c 96.079,-96.07721 175.253196,-174.68583 175.942696,
+          -174.68583 0.6895,0 26.281,25.03215 56.8701,
+          55.627 l 55.6165,55.627 -231.245496,231.24803 c -127.185,127.1864
+          -231.5279,231.248 -231.873,231.248 -0.3451,0 -104.688,
+          -104.0616 -231.873,-231.248 z
+        " fill="currentColor"></path></g></svg><svg class="" style="transform:translate(2px, 4px);transition:transform 0.2s ease" viewBox="0 0 926.23699 573.74994" version="1.1" x="0px" y="0px" width="15" height="15"><g transform="translate(904.92214,-879.1482)"><path d="
+          m -673.67664,1221.6502 -231.2455,-231.24803 55.6165,
+          -55.627 c 30.5891,-30.59485 56.1806,-55.627 56.8701,-55.627 0.6894,
+          0 79.8637,78.60862 175.9427,174.68583 l 174.6892,174.6858 174.6892,
+          -174.6858 c 96.079,-96.07721 175.253196,-174.68583 175.942696,
+          -174.68583 0.6895,0 26.281,25.03215 56.8701,
+          55.627 l 55.6165,55.627 -231.245496,231.24803 c -127.185,127.1864
+          -231.5279,231.248 -231.873,231.248 -0.3451,0 -104.688,
+          -104.0616 -231.873,-231.248 z
+        " fill="currentColor"></path></g></svg></div></div><div class="sc-jtXFsC jKDppt api-content"><div class="sc-eCIkAO jVjTxq"><div class="sc-iCfNyT gBxmSK"><div class="sc-hKwBjT gVqSrK api-info"><h1 class="sc-furwPO sc-ctqRxX cTSqwK cpbvgY">Piper TTS REST API<!-- --> <span>(<!-- -->5.0.1<!-- -->)</span></h1><div class="sc-iJKPHa sc-cCcVtu cJMweq jLlVkR"></div><div data-role="redoc-summary" html="" class="sc-iJKPHa sc-cCcVtu cJMweq jLlVkR"></div><div data-role="redoc-description" html="&lt;p&gt;Text to speech with Piper. /v1/speak streams an MP3; /v1/synthesize queues a job that uploads it.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu cJMweq jLlVkR"><p>Text to speech with Piper. /v1/speak streams an MP3; /v1/synthesize queues a job that uploads it.</p>
+</div></div></div></div><div id="tag/Health" data-section-id="tag/Health" class="sc-eCIkAO jVjTxq"><div class="sc-iCfNyT gBxmSK"><div class="sc-hKwBjT gVqSrK"><h2 class="sc-pVUti bSqaeF"><a class="sc-crHjOq bVILEW" href="#tag/Health" aria-label="tag/Health"></a>Health</h2></div></div></div><div id="tag/Health/operation/health" data-section-id="tag/Health/operation/health" class="sc-eCIkAO fwcblJ"><div data-section-id="operation/health" id="operation/health" class="sc-iCfNyT gBxmSK"><div class="sc-hKwBjT gVqSrK"><h2 class="sc-pVUti bSqaeF"><a class="sc-crHjOq bVILEW" href="#tag/Health/operation/health" aria-label="tag/Health/operation/health"></a>Health check<!-- --> </h2><div><h3 class="sc-fIotlj jIDXCX">Responses</h3><div><button class="sc-cbTzWS bSJJYM"><svg class="sc-eggkz ixKnVW" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">200<!-- --> </strong><div html="&lt;p&gt;The service is up.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>The service is up.</p>
+</div></button></div><div><button class="sc-cbTzWS gZwrni"><svg class="sc-eggkz kNOxeG" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">default<!-- --> </strong><div html="&lt;p&gt;Error&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Error</p>
+</div></button></div></div></div><div class="sc-jRQBiJ sc-gKckzE eMcwSW hCcvSb"><div class="sc-fXErrr cElpTj"><button class="sc-jWUBOh ha-DFEV"><span type="get" class="sc-eFejbY iVXwLo http-verb get">get</span><span class="sc-FNYFi bwtbsK">/health</span><svg class="sc-eggkz dSdygy" style="margin-right:-25px" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></button><div aria-hidden="true" class="sc-fmBAGX kwmlAj"><div class="sc-lkgRtK bQvhWS"><div html="" class="sc-iJKPHa sc-cCcVtu cJMweq fOWVGn"></div><div tabindex="0" role="button"><div class="sc-jlRLdN iWvBOX"><span></span>/health</div></div></div></div></div><div><h3 class="sc-kDTkBQ eLZTZJ"> <!-- -->Response samples<!-- --> </h3><div class="sc-cxpUrY gYefmQ" data-rttabs="true"><ul class="react-tabs__tab-list" role="tablist"><li class="tab-error react-tabs__tab--selected" role="tab" id="tab_R_4ssq_0" aria-selected="true" aria-disabled="false" aria-controls="panel_R_4ssq_0" tabindex="0" data-rttab="true">default</li></ul><div class="react-tabs__tab-panel react-tabs__tab-panel--selected" role="tabpanel" id="panel_R_4ssq_0" aria-labelledby="tab_R_4ssq_0"><div><div class="sc-cNKpwA bvzYLa"><span class="sc-bBHFiX cfMJLs">Content type</span><div class="sc-dPiIMO eoIpsO">application/problem+json</div></div><div class="sc-hUpbpP jWgrtg"><div class="sc-cTAoCz kXuYnm"><div class="sc-giYgZj gwYevq"><button><div class="sc-jcFiBM jIotxr">Copy</div></button><button> Expand all </button><button> Collapse all </button></div><div tabindex="0" class="sc-iJKPHa cJMweq sc-jObTYW fuSywj"><div class="redoc-json"><code><button class="collapser" aria-label="collapse"></button><span class="token punctuation">{</span><span class="ellipsis"></span><ul class="obj collapsible"><li><div class="hoverable "><span class="property token string">"detail"</span>: <span class="token string">&quot;Property foo is required but is missing.&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"errors"</span>: <button class="collapser" aria-label="collapse"></button><span class="token punctuation">[</span><span class="ellipsis"></span><ul class="array collapsible"><li><div class="hoverable collapsed"><button class="collapser" aria-label="expand"></button><span class="token punctuation">{</span><span class="ellipsis"></span><ul class="obj collapsible"><li><div class="hoverable collapsed"><span class="property token string">"location"</span>: <span class="token string">&quot;string&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable collapsed"><span class="property token string">"message"</span>: <span class="token string">&quot;string&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable collapsed"><span class="property token string">"value"</span>: <span class="token keyword">null</span></div></li></ul><span class="token punctuation">}</span></div></li></ul><span class="token punctuation">]</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"instance"</span>: <span class="token string">&quot;</span><a href="https://example.com/error-log/abc123">https://example.com/error-log/abc123</a><span class="token string">&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"status"</span>: <span class="token number">400</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"title"</span>: <span class="token string">&quot;Bad Request&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"type"</span>: <span class="token string">&quot;</span><a href="https://example.com/errors/example">https://example.com/errors/example</a><span class="token string">&quot;</span></div></li></ul><span class="token punctuation">}</span></code></div></div></div></div></div></div></div></div></div></div></div><div id="tag/Speech" data-section-id="tag/Speech" class="sc-eCIkAO jVjTxq"><div class="sc-iCfNyT gBxmSK"><div class="sc-hKwBjT gVqSrK"><h2 class="sc-pVUti bSqaeF"><a class="sc-crHjOq bVILEW" href="#tag/Speech" aria-label="tag/Speech"></a>Speech</h2></div></div></div><div id="tag/Speech/operation/speak" data-section-id="tag/Speech/operation/speak" class="sc-eCIkAO fwcblJ"><div data-section-id="operation/speak" id="operation/speak" class="sc-iCfNyT gBxmSK"><div class="sc-hKwBjT gVqSrK"><h2 class="sc-pVUti bSqaeF"><a class="sc-crHjOq bVILEW" href="#tag/Speech/operation/speak" aria-label="tag/Speech/operation/speak"></a>Synchronous text to speech<!-- --> </h2><div class="sc-iFMCWE fpckeD"><div html="&lt;p&gt;Streams the MP3 in the response, chunked, without a Content-Length. Aborting the request frees its concurrency slot.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu cJMweq jLlVkR"><p>Streams the MP3 in the response, chunked, without a Content-Length. Aborting the request frees its concurrency slot.</p>
+</div></div><div><h5 class="sc-iqsgXZ DLudH">header<!-- --> Parameters</h5><table class="sc-hGPAwl ThvSP"><tbody><tr class="last "><td kind="field" title="Content-Type" class="sc-hBUSYK sc-fFelbd bCKJJC ieQgBm"><span class="sc-ieedpP fgKOFl"></span><span class="property-name">Content-Type</span></td><td class="sc-bkkgYE bgyXij"><div><div><span class="sc-gSQHZB sc-lbhHsq kfcLvW eQjJe"></span><span class="sc-gSQHZB sc-iNGDOz kfcLvW cVYrUm">string</span></div> <div><div html="" class="sc-iJKPHa sc-cCcVtu cJMweq fOWVGn"></div></div></div></td></tr></tbody></table></div><h5 class="sc-iqsgXZ DLudH">Request Body schema: <div class="sc-jJoSXA sc-hiCkpJ bHzIcc ktIGpr"><svg class="sc-ikJwur fGTgWG" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg><select class="dropdown-select"><option value="application/json" selected="">application/json</option><option value="text/plain">text/plain</option></select><label>application/json</label></div><div class="sc-gSQHZB sc-eJwVsk sc-dUbsrE kfcLvW fHrDUA bFRAqt">required</div></h5><div html="" class="sc-iJKPHa sc-cCcVtu cJMweq jLlVkR"></div><table class="sc-hGPAwl ThvSP"><tbody><tr class="last "><td kind="field" title="text" class="sc-hBUSYK sc-fFelbd bCKJJC ieQgBm"><span class="sc-ieedpP fgKOFl"></span><span class="property-name">text</span><div class="sc-gSQHZB sc-eJwVsk kfcLvW fHrDUA">required</div></td><td class="sc-bkkgYE bgyXij"><div><div><span class="sc-gSQHZB sc-lbhHsq kfcLvW eQjJe"></span><span class="sc-gSQHZB sc-iNGDOz kfcLvW cVYrUm">string</span><span class="sc-gSQHZB sc-ehCMcF kfcLvW ecXTRB">\S</span></div> <div><div html="&lt;p&gt;The text to speak.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu cJMweq fOWVGn"><p>The text to speak.</p>
+</div></div></div></td></tr></tbody></table><div><h3 class="sc-fIotlj jIDXCX">Responses</h3><div><button class="sc-cbTzWS bSJJYM"><svg class="sc-eggkz ixKnVW" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">200<!-- --> </strong><div html="&lt;p&gt;The MP3 audio stream.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>The MP3 audio stream.</p>
+</div></button></div><div><button class="sc-cbTzWS gZwrni"><svg class="sc-eggkz kNOxeG" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">400<!-- --> </strong><div html="&lt;p&gt;Bad Request&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Bad Request</p>
+</div></button></div><div><button class="sc-cbTzWS gZwrni"><svg class="sc-eggkz kNOxeG" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">413<!-- --> </strong><div html="&lt;p&gt;Request Entity Too Large&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Request Entity Too Large</p>
+</div></button></div><div><button class="sc-cbTzWS gZwrni"><svg class="sc-eggkz kNOxeG" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">422<!-- --> </strong><div html="&lt;p&gt;Unprocessable Entity&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Unprocessable Entity</p>
+</div></button></div><div><button class="sc-cbTzWS gZwrni"><svg class="sc-eggkz kNOxeG" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">500<!-- --> </strong><div html="&lt;p&gt;Internal Server Error&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Internal Server Error</p>
+</div></button></div></div></div><div class="sc-jRQBiJ sc-gKckzE eMcwSW hCcvSb"><div class="sc-fXErrr cElpTj"><button class="sc-jWUBOh ha-DFEV"><span type="post" class="sc-eFejbY eQMCLm http-verb post">post</span><span class="sc-FNYFi bwtbsK">/v1/speak</span><svg class="sc-eggkz dSdygy" style="margin-right:-25px" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></button><div aria-hidden="true" class="sc-fmBAGX kwmlAj"><div class="sc-lkgRtK bQvhWS"><div html="" class="sc-iJKPHa sc-cCcVtu cJMweq fOWVGn"></div><div tabindex="0" role="button"><div class="sc-jlRLdN iWvBOX"><span></span>/v1/speak</div></div></div></div></div><div><h3 class="sc-kDTkBQ eLZTZJ"> <!-- -->Request samples<!-- --> </h3><div class="sc-cxpUrY gYefmQ" data-rttabs="true"><ul class="react-tabs__tab-list" role="tablist"><li class="react-tabs__tab react-tabs__tab--selected" role="tab" id="tab_R_99da_0" aria-selected="true" aria-disabled="false" aria-controls="panel_R_99da_0" tabindex="0" data-rttab="true">Payload</li></ul><div class="react-tabs__tab-panel react-tabs__tab-panel--selected" role="tabpanel" id="panel_R_99da_0" aria-labelledby="tab_R_99da_0"><div><div class="sc-cNKpwA bvzYLa"><span class="sc-bBHFiX cfMJLs">Content type</span><div class="sc-jJoSXA sc-AjlSJ bHzIcc dnfZlI"><svg class="sc-ikJwur jhBcp" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg><select class="dropdown-select"><option value="application/json" selected="">application/json</option><option value="text/plain">text/plain</option></select><label>application/json</label></div></div><div class="sc-hUpbpP jWgrtg"><div class="sc-cTAoCz kXuYnm"><div class="sc-giYgZj gwYevq"><button><div class="sc-jcFiBM jIotxr">Copy</div></button></div><div tabindex="0" class="sc-iJKPHa cJMweq sc-jObTYW fuSywj"><div class="redoc-json"><code><button class="collapser" aria-label="collapse"></button><span class="token punctuation">{</span><span class="ellipsis"></span><ul class="obj collapsible"><li><div class="hoverable "><span class="property token string">"text"</span>: <span class="token string">&quot;Hello from Piper API&quot;</span></div></li></ul><span class="token punctuation">}</span></code></div></div></div></div></div></div></div></div><div><h3 class="sc-kDTkBQ eLZTZJ"> <!-- -->Response samples<!-- --> </h3><div class="sc-cxpUrY gYefmQ" data-rttabs="true"><ul class="react-tabs__tab-list" role="tablist"><li class="tab-error react-tabs__tab--selected" role="tab" id="tab_R_9pda_0" aria-selected="true" aria-disabled="false" aria-controls="panel_R_9pda_0" tabindex="0" data-rttab="true">400</li><li class="tab-error" role="tab" id="tab_R_9pda_1" aria-selected="false" aria-disabled="false" aria-controls="panel_R_9pda_1" data-rttab="true">413</li><li class="tab-error" role="tab" id="tab_R_9pda_2" aria-selected="false" aria-disabled="false" aria-controls="panel_R_9pda_2" data-rttab="true">422</li><li class="tab-error" role="tab" id="tab_R_9pda_3" aria-selected="false" aria-disabled="false" aria-controls="panel_R_9pda_3" data-rttab="true">500</li></ul><div class="react-tabs__tab-panel react-tabs__tab-panel--selected" role="tabpanel" id="panel_R_9pda_0" aria-labelledby="tab_R_9pda_0"><div><div class="sc-cNKpwA bvzYLa"><span class="sc-bBHFiX cfMJLs">Content type</span><div class="sc-dPiIMO eoIpsO">application/problem+json</div></div><div class="sc-hUpbpP jWgrtg"><div class="sc-cTAoCz kXuYnm"><div class="sc-giYgZj gwYevq"><button><div class="sc-jcFiBM jIotxr">Copy</div></button><button> Expand all </button><button> Collapse all </button></div><div tabindex="0" class="sc-iJKPHa cJMweq sc-jObTYW fuSywj"><div class="redoc-json"><code><button class="collapser" aria-label="collapse"></button><span class="token punctuation">{</span><span class="ellipsis"></span><ul class="obj collapsible"><li><div class="hoverable "><span class="property token string">"detail"</span>: <span class="token string">&quot;Property foo is required but is missing.&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"errors"</span>: <button class="collapser" aria-label="collapse"></button><span class="token punctuation">[</span><span class="ellipsis"></span><ul class="array collapsible"><li><div class="hoverable collapsed"><button class="collapser" aria-label="expand"></button><span class="token punctuation">{</span><span class="ellipsis"></span><ul class="obj collapsible"><li><div class="hoverable collapsed"><span class="property token string">"location"</span>: <span class="token string">&quot;string&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable collapsed"><span class="property token string">"message"</span>: <span class="token string">&quot;string&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable collapsed"><span class="property token string">"value"</span>: <span class="token keyword">null</span></div></li></ul><span class="token punctuation">}</span></div></li></ul><span class="token punctuation">]</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"instance"</span>: <span class="token string">&quot;</span><a href="https://example.com/error-log/abc123">https://example.com/error-log/abc123</a><span class="token string">&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"status"</span>: <span class="token number">400</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"title"</span>: <span class="token string">&quot;Bad Request&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"type"</span>: <span class="token string">&quot;</span><a href="https://example.com/errors/example">https://example.com/errors/example</a><span class="token string">&quot;</span></div></li></ul><span class="token punctuation">}</span></code></div></div></div></div></div></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel_R_9pda_1" aria-labelledby="tab_R_9pda_1"></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel_R_9pda_2" aria-labelledby="tab_R_9pda_2"></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel_R_9pda_3" aria-labelledby="tab_R_9pda_3"></div></div></div></div></div></div><div id="tag/Speech/operation/synthesize" data-section-id="tag/Speech/operation/synthesize" class="sc-eCIkAO fwcblJ"><div data-section-id="operation/synthesize" id="operation/synthesize" class="sc-iCfNyT gBxmSK"><div class="sc-hKwBjT gVqSrK"><h2 class="sc-pVUti bSqaeF"><a class="sc-crHjOq bVILEW" href="#tag/Speech/operation/synthesize" aria-label="tag/Speech/operation/synthesize"></a>Asynchronous text to speech<!-- --> </h2><div class="sc-iFMCWE fpckeD"><div html="&lt;p&gt;Queues a job that generates the MP3 and uploads it to the presigned URL returned by genUploadUrl. Progress goes to statusCallbackUrl. A 202 means queued, not done.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu cJMweq jLlVkR"><p>Queues a job that generates the MP3 and uploads it to the presigned URL returned by genUploadUrl. Progress goes to statusCallbackUrl. A 202 means queued, not done.</p>
+</div></div><div><h5 class="sc-iqsgXZ DLudH">header<!-- --> Parameters</h5><table class="sc-hGPAwl ThvSP"><tbody><tr class="last "><td kind="field" title="Authorization" class="sc-hBUSYK sc-fFelbd bCKJJC ieQgBm"><span class="sc-ieedpP fgKOFl"></span><span class="property-name">Authorization</span></td><td class="sc-bkkgYE bgyXij"><div><div><span class="sc-gSQHZB sc-lbhHsq kfcLvW eQjJe"></span><span class="sc-gSQHZB sc-iNGDOz kfcLvW cVYrUm">string</span></div> <div><div html="&lt;p&gt;Passed through to the callbacks. Optional.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu cJMweq fOWVGn"><p>Passed through to the callbacks. Optional.</p>
+</div></div></div></td></tr></tbody></table></div><h5 class="sc-iqsgXZ DLudH">Request Body schema: <span class="sc-gWWZvT kNPqqp">application/json</span><div class="sc-gSQHZB sc-eJwVsk sc-dUbsrE kfcLvW fHrDUA bFRAqt">required</div></h5><div html="" class="sc-iJKPHa sc-cCcVtu cJMweq jLlVkR"></div><table class="sc-hGPAwl ThvSP"><tbody><tr class=""><td kind="field" title="genUploadUrl" class="sc-hBUSYK sc-fFelbd bCKJJC ieQgBm"><span class="sc-ieedpP fgKOFl"></span><span class="property-name">genUploadUrl</span><div class="sc-gSQHZB sc-eJwVsk kfcLvW fHrDUA">required</div></td><td class="sc-bkkgYE bgyXij"><div><div><span class="sc-gSQHZB sc-lbhHsq kfcLvW eQjJe"></span><span class="sc-gSQHZB sc-iNGDOz kfcLvW cVYrUm">string</span><span class="sc-gSQHZB sc-ehCMcF kfcLvW ecXTRB">\S</span></div> <div><div html="&lt;p&gt;Called once per attempt to get a presigned PUT URL. Replies with 200 and {&amp;quot;uploadUrl&amp;quot;: &amp;quot;...&amp;quot;}.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu cJMweq fOWVGn"><p>Called once per attempt to get a presigned PUT URL. Replies with 200 and {&quot;uploadUrl&quot;: &quot;...&quot;}.</p>
+</div></div></div></td></tr><tr class=""><td kind="field" title="statusCallbackUrl" class="sc-hBUSYK sc-fFelbd bCKJJC ieQgBm"><span class="sc-ieedpP fgKOFl"></span><span class="property-name">statusCallbackUrl</span><div class="sc-gSQHZB sc-eJwVsk kfcLvW fHrDUA">required</div></td><td class="sc-bkkgYE bgyXij"><div><div><span class="sc-gSQHZB sc-lbhHsq kfcLvW eQjJe"></span><span class="sc-gSQHZB sc-iNGDOz kfcLvW cVYrUm">string</span><span class="sc-gSQHZB sc-ehCMcF kfcLvW ecXTRB">\S</span></div> <div><div html="&lt;p&gt;Receives the progress and status reports.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu cJMweq fOWVGn"><p>Receives the progress and status reports.</p>
+</div></div></div></td></tr><tr class="last "><td kind="field" title="text" class="sc-hBUSYK sc-fFelbd bCKJJC ieQgBm"><span class="sc-ieedpP fgKOFl"></span><span class="property-name">text</span><div class="sc-gSQHZB sc-eJwVsk kfcLvW fHrDUA">required</div></td><td class="sc-bkkgYE bgyXij"><div><div><span class="sc-gSQHZB sc-lbhHsq kfcLvW eQjJe"></span><span class="sc-gSQHZB sc-iNGDOz kfcLvW cVYrUm">string</span><span class="sc-gSQHZB sc-ehCMcF kfcLvW ecXTRB">\S</span></div> <div><div html="&lt;p&gt;The text to synthesize.&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu cJMweq fOWVGn"><p>The text to synthesize.</p>
+</div></div></div></td></tr></tbody></table><div><h3 class="sc-fIotlj jIDXCX">Responses</h3><div><button class="sc-cbTzWS bSJJYM"><svg class="sc-eggkz ixKnVW" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">202<!-- --> </strong><div html="&lt;p&gt;Accepted&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Accepted</p>
+</div></button></div><div><button class="sc-cbTzWS gZwrni"><svg class="sc-eggkz kNOxeG" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">413<!-- --> </strong><div html="&lt;p&gt;Request Entity Too Large&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Request Entity Too Large</p>
+</div></button></div><div><button class="sc-cbTzWS gZwrni"><svg class="sc-eggkz kNOxeG" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">422<!-- --> </strong><div html="&lt;p&gt;Unprocessable Entity&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Unprocessable Entity</p>
+</div></button></div><div><button class="sc-cbTzWS gZwrni"><svg class="sc-eggkz kNOxeG" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">500<!-- --> </strong><div html="&lt;p&gt;Internal Server Error&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Internal Server Error</p>
+</div></button></div><div><button class="sc-cbTzWS gZwrni"><svg class="sc-eggkz kNOxeG" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-fXeXnG esNchU">503<!-- --> </strong><div html="&lt;p&gt;Service Unavailable&lt;/p&gt;
+" class="sc-iJKPHa sc-cCcVtu sc-cidDfp cJMweq cOozNb hsJTWw"><p>Service Unavailable</p>
+</div></button></div></div></div><div class="sc-jRQBiJ sc-gKckzE eMcwSW hCcvSb"><div class="sc-fXErrr cElpTj"><button class="sc-jWUBOh ha-DFEV"><span type="post" class="sc-eFejbY eQMCLm http-verb post">post</span><span class="sc-FNYFi bwtbsK">/v1/synthesize</span><svg class="sc-eggkz dSdygy" style="margin-right:-25px" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></button><div aria-hidden="true" class="sc-fmBAGX kwmlAj"><div class="sc-lkgRtK bQvhWS"><div html="" class="sc-iJKPHa sc-cCcVtu cJMweq fOWVGn"></div><div tabindex="0" role="button"><div class="sc-jlRLdN iWvBOX"><span></span>/v1/synthesize</div></div></div></div></div><div><h3 class="sc-kDTkBQ eLZTZJ"> <!-- -->Request samples<!-- --> </h3><div class="sc-cxpUrY gYefmQ" data-rttabs="true"><ul class="react-tabs__tab-list" role="tablist"><li class="react-tabs__tab react-tabs__tab--selected" role="tab" id="tab_R_99la_0" aria-selected="true" aria-disabled="false" aria-controls="panel_R_99la_0" tabindex="0" data-rttab="true">Payload</li></ul><div class="react-tabs__tab-panel react-tabs__tab-panel--selected" role="tabpanel" id="panel_R_99la_0" aria-labelledby="tab_R_99la_0"><div><div class="sc-cNKpwA bvzYLa"><span class="sc-bBHFiX cfMJLs">Content type</span><div class="sc-dPiIMO eoIpsO">application/json</div></div><div class="sc-hUpbpP jWgrtg"><div class="sc-cTAoCz kXuYnm"><div class="sc-giYgZj gwYevq"><button><div class="sc-jcFiBM jIotxr">Copy</div></button></div><div tabindex="0" class="sc-iJKPHa cJMweq sc-jObTYW fuSywj"><div class="redoc-json"><code><button class="collapser" aria-label="collapse"></button><span class="token punctuation">{</span><span class="ellipsis"></span><ul class="obj collapsible"><li><div class="hoverable "><span class="property token string">"genUploadUrl"</span>: <span class="token string">&quot;</span><a href="https://your-server.example/generate-upload-url">https://your-server.example/generate-upload-url</a><span class="token string">&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"statusCallbackUrl"</span>: <span class="token string">&quot;</span><a href="https://your-server.example/synthesis-status">https://your-server.example/synthesis-status</a><span class="token string">&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"text"</span>: <span class="token string">&quot;Hello world, this is a test of the asynchronous synthesis API.&quot;</span></div></li></ul><span class="token punctuation">}</span></code></div></div></div></div></div></div></div></div><div><h3 class="sc-kDTkBQ eLZTZJ"> <!-- -->Response samples<!-- --> </h3><div class="sc-cxpUrY gYefmQ" data-rttabs="true"><ul class="react-tabs__tab-list" role="tablist"><li class="tab-success react-tabs__tab--selected" role="tab" id="tab_R_9pla_0" aria-selected="true" aria-disabled="false" aria-controls="panel_R_9pla_0" tabindex="0" data-rttab="true">202</li><li class="tab-error" role="tab" id="tab_R_9pla_1" aria-selected="false" aria-disabled="false" aria-controls="panel_R_9pla_1" data-rttab="true">413</li><li class="tab-error" role="tab" id="tab_R_9pla_2" aria-selected="false" aria-disabled="false" aria-controls="panel_R_9pla_2" data-rttab="true">422</li><li class="tab-error" role="tab" id="tab_R_9pla_3" aria-selected="false" aria-disabled="false" aria-controls="panel_R_9pla_3" data-rttab="true">500</li><li class="tab-error" role="tab" id="tab_R_9pla_4" aria-selected="false" aria-disabled="false" aria-controls="panel_R_9pla_4" data-rttab="true">503</li></ul><div class="react-tabs__tab-panel react-tabs__tab-panel--selected" role="tabpanel" id="panel_R_9pla_0" aria-labelledby="tab_R_9pla_0"><div><div class="sc-cNKpwA bvzYLa"><span class="sc-bBHFiX cfMJLs">Content type</span><div class="sc-dPiIMO eoIpsO">application/json</div></div><div class="sc-hUpbpP jWgrtg"><div class="sc-cTAoCz kXuYnm"><div class="sc-giYgZj gwYevq"><button><div class="sc-jcFiBM jIotxr">Copy</div></button></div><div tabindex="0" class="sc-iJKPHa cJMweq sc-jObTYW fuSywj"><div class="redoc-json"><code><button class="collapser" aria-label="collapse"></button><span class="token punctuation">{</span><span class="ellipsis"></span><ul class="obj collapsible"><li><div class="hoverable "><span class="property token string">"jobId"</span>: <span class="token string">&quot;e52cbe80-17de-4204-a983-bb1c10c36341&quot;</span></div></li></ul><span class="token punctuation">}</span></code></div></div></div></div></div></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel_R_9pla_1" aria-labelledby="tab_R_9pla_1"></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel_R_9pla_2" aria-labelledby="tab_R_9pla_2"></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel_R_9pla_3" aria-labelledby="tab_R_9pla_3"></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel_R_9pla_4" aria-labelledby="tab_R_9pla_4"></div></div></div></div></div></div></div><div class="sc-eldhqJ erAVi"></div></div></div>
+      <script>
+      const __redoc_state = {"menu":{"activeItemIdx":-1},"spec":{"data":{"components":{"schemas":{"ErrorDetail":{"additionalProperties":false,"properties":{"location":{"description":"Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'","type":"string"},"message":{"description":"Error message text","type":"string"},"value":{"description":"The value at the given location"}},"type":"object"},"ErrorModel":{"additionalProperties":false,"properties":{"detail":{"description":"A human-readable explanation specific to this occurrence of the problem.","examples":["Property foo is required but is missing."],"type":"string"},"errors":{"description":"Optional list of individual error details","items":{"$ref":"#/components/schemas/ErrorDetail"},"type":["array","null"]},"instance":{"description":"A URI reference that identifies the specific occurrence of the problem.","examples":["https://example.com/error-log/abc123"],"format":"uri","type":"string"},"status":{"description":"HTTP status code","examples":[400],"format":"int64","type":"integer"},"title":{"description":"A short, human-readable summary of the problem type. This value should not change between occurrences of the error.","examples":["Bad Request"],"type":"string"},"type":{"default":"about:blank","description":"A URI reference to human-readable documentation for the error.","examples":["https://example.com/errors/example"],"format":"uri","type":"string"}},"type":"object"},"Request":{"additionalProperties":false,"properties":{"genUploadUrl":{"description":"Called once per attempt to get a presigned PUT URL. Replies with 200 and {\"uploadUrl\": \"...\"}.","examples":["https://your-server.example/generate-upload-url"],"pattern":"\\S","type":"string"},"statusCallbackUrl":{"description":"Receives the progress and status reports.","examples":["https://your-server.example/synthesis-status"],"pattern":"\\S","type":"string"},"text":{"description":"The text to synthesize.","examples":["Hello world, this is a test of the asynchronous synthesis API."],"pattern":"\\S","type":"string"}},"required":["text","genUploadUrl","statusCallbackUrl"],"type":"object"},"SynthesizeOutputBody":{"additionalProperties":false,"properties":{"jobId":{"description":"Identifies the job in the callbacks.","examples":["e52cbe80-17de-4204-a983-bb1c10c36341"],"format":"uuid","type":"string"}},"required":["jobId"],"type":"object"}}},"info":{"description":"Text to speech with Piper. /v1/speak streams an MP3; /v1/synthesize queues a job that uploads it.","title":"Piper TTS REST API","version":"5.0.1"},"openapi":"3.1.0","paths":{"/health":{"get":{"operationId":"health","responses":{"200":{"content":{"text/plain":{"schema":{"examples":["OK"],"type":"string"}}},"description":"The service is up.","headers":{"Content-Type":{"schema":{"type":"string"}}}},"default":{"content":{"application/problem+json":{"schema":{"$ref":"#/components/schemas/ErrorModel"}}},"description":"Error"}},"summary":"Health check","tags":["Health"]}},"/v1/speak":{"post":{"description":"Streams the MP3 in the response, chunked, without a Content-Length. Aborting the request frees its concurrency slot.","operationId":"speak","parameters":[{"in":"header","name":"Content-Type","schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"additionalProperties":false,"properties":{"text":{"description":"The text to speak.","examples":["Hello from Piper API"],"pattern":"\\S","type":"string"}},"required":["text"],"type":"object"}},"text/plain":{"schema":{"examples":["Hello from plain text"],"type":"string"}}},"required":true},"responses":{"200":{"content":{"audio/mpeg":{"schema":{"contentMediaType":"application/octet-stream","format":"binary","type":"string"}}},"description":"The MP3 audio stream.","headers":{"Cache-Control":{"schema":{"type":"string"}},"Content-Disposition":{"schema":{"type":"string"}},"x-trace-id":{"description":"The trace id, when OTEL_ENABLED=true.","schema":{"type":"string"}}}},"400":{"content":{"application/problem+json":{"schema":{"$ref":"#/components/schemas/ErrorModel"}}},"description":"Bad Request"},"413":{"content":{"application/problem+json":{"schema":{"$ref":"#/components/schemas/ErrorModel"}}},"description":"Request Entity Too Large"},"422":{"content":{"application/problem+json":{"schema":{"$ref":"#/components/schemas/ErrorModel"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/problem+json":{"schema":{"$ref":"#/components/schemas/ErrorModel"}}},"description":"Internal Server Error"}},"summary":"Synchronous text to speech","tags":["Speech"]}},"/v1/synthesize":{"post":{"description":"Queues a job that generates the MP3 and uploads it to the presigned URL returned by genUploadUrl. Progress goes to statusCallbackUrl. A 202 means queued, not done.","operationId":"synthesize","parameters":[{"description":"Passed through to the callbacks. Optional.","in":"header","name":"Authorization","schema":{"description":"Passed through to the callbacks. Optional.","type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Request"}}},"required":true},"responses":{"202":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/SynthesizeOutputBody"}}},"description":"Accepted"},"413":{"content":{"application/problem+json":{"schema":{"$ref":"#/components/schemas/ErrorModel"}}},"description":"Request Entity Too Large"},"422":{"content":{"application/problem+json":{"schema":{"$ref":"#/components/schemas/ErrorModel"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/problem+json":{"schema":{"$ref":"#/components/schemas/ErrorModel"}}},"description":"Internal Server Error"},"503":{"content":{"application/problem+json":{"schema":{"$ref":"#/components/schemas/ErrorModel"}}},"description":"Service Unavailable"}},"summary":"Asynchronous text to speech","tags":["Speech"]}}}}},"searchIndex":{"store":["tag/Health","tag/Health/operation/health","tag/Speech","tag/Speech/operation/speak","tag/Speech/operation/synthesize"],"index":{"version":"2.3.9","fields":["title","description"],"fieldVectors":[["title/0",[0,0.678]],["description/0",[]],["title/1",[0,0.539,1,1.386]],["description/1",[0,0.818]],["title/2",[2,0.678]],["description/2",[]],["title/3",[2,0.447,3,1.151,4,0.727]],["description/3",[5,0.984,6,0.621,7,0.984,8,0.984,9,0.984,10,0.984,11,0.984,12,0.984,13,0.984,14,0.984,15,0.984,16,0.984]],["title/4",[2,0.447,4,0.727,17,1.151]],["description/4",[6,0.5,18,0.792,19,0.792,20,0.792,21,0.792,22,0.792,23,0.792,24,0.792,25,0.792,26,0.792,27,0.792,28,0.792,29,0.792,30,0.792,31,0.792,32,0.792,33,0.792]]],"invertedIndex":[["202",{"_index":29,"title":{},"description":{"4":{}}}],["abort",{"_index":11,"title":{},"description":{"3":{}}}],["asynchron",{"_index":17,"title":{"4":{}},"description":{}}],["check",{"_index":1,"title":{"1":{}},"description":{}}],["chunk",{"_index":8,"title":{},"description":{"3":{}}}],["concurr",{"_index":14,"title":{},"description":{"3":{}}}],["content-length",{"_index":10,"title":{},"description":{"3":{}}}],["done",{"_index":32,"title":{},"description":{"4":{}}}],["free",{"_index":13,"title":{},"description":{"3":{}}}],["gener",{"_index":20,"title":{},"description":{"4":{}}}],["genuploadurl",{"_index":25,"title":{},"description":{"4":{}}}],["goe",{"_index":27,"title":{},"description":{"4":{}}}],["health",{"_index":0,"title":{"0":{},"1":{}},"description":{"1":{}}}],["job",{"_index":19,"title":{},"description":{"4":{}}}],["mean",{"_index":30,"title":{},"description":{"4":{}}}],["mp3",{"_index":6,"title":{},"description":{"3":{},"4":{}}}],["presign",{"_index":22,"title":{},"description":{"4":{}}}],["progress",{"_index":26,"title":{},"description":{"4":{}}}],["queu",{"_index":31,"title":{},"description":{"4":{}}}],["queue",{"_index":18,"title":{},"description":{"4":{}}}],["request",{"_index":12,"title":{},"description":{"3":{}}}],["respons",{"_index":7,"title":{},"description":{"3":{}}}],["return",{"_index":24,"title":{},"description":{"4":{}}}],["slot",{"_index":15,"title":{},"description":{"3":{}}}],["speech",{"_index":2,"title":{"2":{},"3":{},"4":{}},"description":{}}],["statuscallbackurl",{"_index":28,"title":{},"description":{"4":{}}}],["stream",{"_index":5,"title":{},"description":{"3":{}}}],["synchron",{"_index":3,"title":{"3":{}},"description":{}}],["text",{"_index":4,"title":{"3":{},"4":{}},"description":{}}],["upload",{"_index":21,"title":{},"description":{"4":{}}}],["url",{"_index":23,"title":{},"description":{"4":{}}}],["v1/speak",{"_index":16,"title":{},"description":{"3":{}}}],["v1/synthes",{"_index":33,"title":{},"description":{"4":{}}}],["without",{"_index":9,"title":{},"description":{"3":{}}}]],"pipeline":[]}},"options":{"hideDownloadButton":true,"theme":{"colors":{"primary":{"main":"#60a5fa"},"text":{"primary":"#e5e5e5","secondary":"#a3a3a3"},"border":{"dark":"rgba(255,255,255,0.1)","light":"#262626"}},"schema":{"nestedBackground":"#1a1a1a"},"typography":{"code":{"color":"#ff8a80","backgroundColor":"rgba(255,255,255,0.08)"}},"sidebar":{"backgroundColor":"#171717","textColor":"#e5e5e5"},"fab":{"backgroundColor":"#262626","color":"#60a5fa"}}}};
+
+      var container = document.getElementById('redoc');
+      Redoc.hydrate(__redoc_state, container);
+
+      </script>
+</body>
+
+</html>

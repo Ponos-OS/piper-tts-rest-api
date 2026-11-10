@@ -130,7 +130,7 @@
   "info": {
     "description": "Text to speech with Piper. /v1/speak streams an MP3; /v1/synthesize queues a job that uploads it.",
     "title": "Piper TTS REST API",
-    "version": "unknown"
+    "version": "5.0.1"
   },
   "openapi": "3.1.0",
   "paths": {
