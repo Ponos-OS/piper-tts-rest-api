@@ -15,6 +15,15 @@ make integration_test # needs Docker; also builds the image and runs the e2e tes
 make lint_check
 ```
 
+To try both endpoints by hand:
+
+```shell
+docker compose up --build -d
+```
+
+- Swagger UI: <http://localhost:3000/docs>, the spec: <http://localhost:3000/openapi.json>.
+- `POST /v1/synthesize` with `"genUploadUrl": "http://dummy-backend:8080/upload-url"` and `"statusCallbackUrl": "http://dummy-backend:8080/status"`. The dummy backend returns presigned URLs for Garage (S3, port 3900) and logs every status callback and, when done, a download link: `docker compose logs -f dummy-backend`.
+
 To test the service under load:
 
 ```shell

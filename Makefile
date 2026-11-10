@@ -2,7 +2,7 @@ SHELL         := /bin/bash
 .SHELLFLAGS   := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
-.PHONY: help init run build test integration_test lint_check lint clean
+.PHONY: help init run build schema test integration_test lint_check lint clean
 
 BIN  ?= bin/server
 LINT := go tool -modfile=tools/go.mod golangci-lint
@@ -28,6 +28,11 @@ run:
 ## Builds the server binary into bin/
 build:
 	go build -o $(BIN) ./cmd/server
+
+## Writes the OpenAPI document to docs/openapi.json
+schema:
+	mkdir -p docs
+	go run ./cmd/openapi > docs/openapi.json
 
 ## Runs unit tests
 test:

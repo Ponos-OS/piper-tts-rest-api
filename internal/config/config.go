@@ -82,6 +82,8 @@ type Service struct {
 	Version string
 	// Env is production, development or test; the latter two relax the HTTPS callback rule.
 	Env string
+	// DocsEnabled serves the Swagger UI and the OpenAPI document.
+	DocsEnabled bool
 }
 
 // Log holds logging settings. Valid values are checked by Load.
@@ -164,6 +166,8 @@ func Load(lookup func(key string) (string, bool)) (Config, error) {
 		Name:    l.str("SERVICE_NAME", defaultServiceName),
 		Version: l.str("SERVICE_VERSION", defaultServiceVersion),
 		Env:     l.str("APP_ENV", defaultEnvironment),
+
+		DocsEnabled: l.boolean("DOCS_ENABLED", false),
 	}
 
 	cfg := Config{

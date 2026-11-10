@@ -30,14 +30,14 @@ echo "  traceparent     = ${TRACEPARENT}"
 echo "Open the trace and logs dashboard at http://localhost:3001/d/piper-tts-observability."
 
 curl -f \
-	-X POST http://localhost:3000/speak \
+	-X POST http://localhost:3000/v1/speak \
 	-H "traceparent: ${TRACEPARENT}" \
 	-H 'content-type: application/json' \
 	-d '{"text":"Hello from a single command test"}' \
 	-o hello-world.mp3
 
 # curl -f \
-# 	-X POST http://localhost:3000/speak \
+# 	-X POST http://localhost:3000/v1/speak \
 # 	-H "traceparent: ${TRACEPARENT}" \
 # 	-H 'content-type: text/plain; charset=utf-8' \
 # 	--data-binary @input/half-maximum-allowed-size.txt \

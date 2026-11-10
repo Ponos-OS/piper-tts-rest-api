@@ -74,7 +74,8 @@ linters:
             - $gostd
             - github.com/kasir-barati/piper-tts-rest-api
             - github.com/go-chi/chi
-            - github.com/go-playground/validator
+            - github.com/aws/aws-sdk-go-v2
+            - github.com/danielgtaylor/huma
             - github.com/google/uuid
             - github.com/rabbitmq/amqp091-go
             - go.opentelemetry.io

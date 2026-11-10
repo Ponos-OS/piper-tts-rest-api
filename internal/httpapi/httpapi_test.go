@@ -246,10 +246,10 @@ func TestTracing_ARequestGetsASpanNamedAfterItsRouteInTheCallersTrace(t *testing
 
 	rec := postSynthesize(t, router, `{}`, map[string]string{"traceparent": traceparent})
 
-	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	ended := spans.Ended()
 	require.Len(t, ended, 1)
-	assert.Equal(t, "POST /synthesize", ended[0].Name())
+	assert.Equal(t, "POST /v1/synthesize", ended[0].Name())
 	assert.Equal(t, traceID, ended[0].SpanContext().TraceID().String())
 }
 

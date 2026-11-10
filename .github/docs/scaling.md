@@ -35,7 +35,7 @@ Run RabbitMQ with persistent storage and quorum-queue replication appropriate to
 
 ### Shutdown and Stuck Requests
 
-On SIGTERM or SIGINT the service stops accepting new connections and waits for in-flight requests (for example a long `/speak` stream) to finish. It has no shutdown deadline of its own, so a stuck request, such as a client that stopped reading, keeps the process alive.
+On SIGTERM or SIGINT the service stops accepting new connections and waits for in-flight requests (for example a long `/v1/speak` stream) to finish. It has no shutdown deadline of its own, so a stuck request, such as a client that stopped reading, keeps the process alive.
 
 Your orchestrator must enforce the limit and force-kill the container:
 

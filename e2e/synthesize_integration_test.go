@@ -227,7 +227,7 @@ func (s *stack) submit(t *testing.T, j job, text string) string {
 		"text": text, "genUploadUrl": j.GenUploadURL, "statusCallbackUrl": j.StatusCallbackURL,
 	})
 	require.NoError(t, err)
-	resp := s.do(t, http.MethodPost, s.backendURL+"/synthesize", body)
+	resp := s.do(t, http.MethodPost, s.backendURL+"/v1/synthesize", body)
 	defer resp.Body.Close() //nolint:errcheck // a test.
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 

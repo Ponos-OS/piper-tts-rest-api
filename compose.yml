@@ -4,6 +4,11 @@ services:
     # environment:
     #   LOGGING_MODE: "JSON"
     build: .
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      DOCS_ENABLED: "true"
+      SYNTHESIZE_REQUIRE_HTTPS_CALLBACKS: "false"
+      SYNTHESIZE_CALLBACK_ALLOWED_HOSTS: dummy-backend,garage
     user: "1000:1000"
     ports:
       - "3000:$PORT"
@@ -22,6 +27,31 @@ services:
         condition: service_started
       otel-healthcheck:
         condition: service_completed_successfully
+      garage:
+        condition: service_started
+      dummy-backend:
+        condition: service_started
+
+  # S3 for the uploaded MP3s. The image has no shell, so it has no healthcheck.
+  garage:
+    image: dxflrs/garage:v2.4.1
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: piper-access-key
+      GARAGE_DEFAULT_SECRET_KEY: piper-secret-key-0123456789
+      GARAGE_DEFAULT_BUCKET: piper
+    volumes:
+      - ./local-setup/garage.toml:/etc/garage.toml:ro
+    ports:
+      - 3900:3900 # S3 API
+
+  # Plays the client of /v1/synthesize: returns presigned PUT URLs for Garage and logs the status callbacks (docker compose logs -f dummy-backend).
+  dummy-backend:
+    build:
+      context: .
+      dockerfile: local-setup/backend/Dockerfile
+    ports:
+      - 8080:8080
 
   rabbitmq:
     image: rabbitmq:4.4-management-alpine

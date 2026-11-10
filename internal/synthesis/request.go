@@ -20,11 +20,11 @@ const (
 )
 
 // Request is the body of POST /synthesize.
-// The `validate` tags are checked when the body is decoded; Normalize checks the URL rules that depend on configuration.
+// The schema tags are checked when the body is decoded; Normalize checks the URL rules that depend on configuration.
 type Request struct {
-	Text              string `json:"text"              validate:"required,notblank"`
-	GenUploadURL      string `json:"genUploadUrl"      validate:"required,notblank"`
-	StatusCallbackURL string `json:"statusCallbackUrl" validate:"required,notblank"`
+	Text              string `json:"text"              doc:"The text to synthesize."                                                              example:"Hello world, this is a test of the asynchronous synthesis API." pattern:"\\S"`
+	GenUploadURL      string `json:"genUploadUrl"      doc:"Called once per attempt to get a presigned PUT URL. Replies with 200 and {\"uploadUrl\": \"...\"}." example:"https://your-server.example/generate-upload-url"                              pattern:"\\S"`
+	StatusCallbackURL string `json:"statusCallbackUrl" doc:"Receives the progress and status reports."                                                example:"https://your-server.example/synthesis-status"                                    pattern:"\\S"`
 }
 
 // Violation says which JSON field broke which rule.

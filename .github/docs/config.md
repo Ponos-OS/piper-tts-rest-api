@@ -27,6 +27,11 @@ You can configure and setup this image using env variables.
       <td>HTTP port.</td>
     </tr>
     <tr>
+      <td>DOCS_ENABLED</td>
+      <td>false</td>
+      <td>Serves Swagger UI at <code>/docs</code> and the OpenAPI document at <code>/openapi.json</code>. Keep it off in production.</td>
+    </tr>
+    <tr>
       <td>APP_ENV</td>
       <td>production</td>
       <td><code>development</code> / <code>test</code> relaxes HTTPS requirement.</td>
@@ -171,7 +176,7 @@ Every request and response is logged. For end-to-end tracing across services, en
 <details><summary><code>LOGGING_MODE=PLAIN_TEXT</code> (default)</summary>
 
 ```
-[2026-03-08T00:17:21.123Z]     HttpMiddleware       [piper-tts-rest-api] Incoming POST /speak | {"method":"POST","url":"/speak","headers":{...}}
+[2026-03-08T00:17:21.123Z]     HttpMiddleware       [piper-tts-rest-api] Incoming POST /v1/speak | {"method":"POST","url":"/v1/speak","headers":{...}}
 ```
 
 </details>
@@ -184,9 +189,9 @@ Every request and response is logged. For end-to-end tracing across services, en
   "level": "info",
   "service": "piper-tts-rest-api",
   "context": "HttpMiddleware",
-  "message": "Incoming POST /speak",
+  "message": "Incoming POST /v1/speak",
   "method": "POST",
-  "url": "/speak",
+  "url": "/v1/speak",
   "headers": {}
 }
 ```

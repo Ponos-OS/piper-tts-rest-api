@@ -92,23 +92,29 @@ func run() error {
 		return err
 	}
 
-	serveErr := httpapi.Serve(ctx, ln, httpapi.NewRouter(httpapi.Options{
-		Logger:           logger,
-		Synthesizer:      synth,
-		Jobs:             broker,
-		MaxConcurrency:   cfg.MaxConcurrency,
-		MaxBodySizeBytes: cfg.MaxBodySizeBytes,
-		Synthesize: httpapi.SynthesizeOptions{
-			MaxBodySizeBytes: cfg.Synthesize.MaxBodySizeBytes,
-			Callback:         cfg.Synthesize.Callback,
-		},
-	}))
+	serveErr := httpapi.Serve(ctx, ln, httpapi.NewRouter(routerOptions(cfg, logger, synth, broker)))
 	stop() // Guarantee the consumer is told to exit
 
 	return errors.Join(
 		wrap("serve", serveErr),
 		wrap("consume", <-consumed), // Waits on <-consumed for the consumer to finish.
 	)
+}
+
+func routerOptions(cfg config.Config, logger *slog.Logger, synth *piper.Synthesizer, jobs httpapi.JobPublisher) httpapi.Options {
+	return httpapi.Options{
+		Logger:           logger,
+		Synthesizer:      synth,
+		Jobs:             jobs,
+		MaxConcurrency:   cfg.MaxConcurrency,
+		MaxBodySizeBytes: cfg.MaxBodySizeBytes,
+		Version:          cfg.Service.Version,
+		DocsEnabled:      cfg.Service.DocsEnabled,
+		Synthesize: httpapi.SynthesizeOptions{
+			MaxBodySizeBytes: cfg.Synthesize.MaxBodySizeBytes,
+			Callback:         cfg.Synthesize.Callback,
+		},
+	}
 }
 
 // startWorker consumes jobs in the background until ctx is cancelled, then closes the consumer.

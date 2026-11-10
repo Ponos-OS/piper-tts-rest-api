@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Piper TTS REST API docs</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #111;
+      --muted: #666;
+      --accent: #2563eb;
+      --bg: #fafafa;
+      --card: #fff;
+      --border: #e5e5e5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #f2f2f2;
+        --muted: #a3a3a3;
+        --accent: #60a5fa;
+        --bg: #0d0d0d;
+        --card: #171717;
+        --border: #262626;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 720px;
+      margin: 3rem auto;
+      padding: 0 1.25rem;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.55;
+    }
+    h1 { margin: 0 0 0.25rem; font-size: 1.75rem; }
+    p.lead { color: var(--muted); margin: 0 0 2rem; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    section h2 { margin-top: 0; font-size: 1.1rem; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul.versions { list-style: none; padding: 0; margin: 0; }
+    ul.versions li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    ul.versions li:last-child { border-bottom: none; }
+    .version-tag { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.95rem; }
+    .schema-link { color: var(--muted); font-size: 0.85rem; margin-left: 0.75rem; }
+    .badge {
+      display: inline-block;
+      padding: 0.1rem 0.55rem;
+      background: var(--accent);
+      color: white;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+    footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Piper TTS REST API</h1>
+  <p class="lead">REST API documentation — versioned by release.</p>
+
+  <section>
+    <h2>Latest</h2>
+    <p><a href="./latest/">Read the latest docs →</a> <a class="schema-link" href="./latest/openapi.json">openapi.json</a></p>
+  </section>
+
+  <section>
+    <h2>All versions</h2>
+    <ul class="versions" id="versions-list">
+      <li>Loading…</li>
+    </ul>
+  </section>
+
+  <footer>
+    <a href="https://github.com/kasir-barati/piper-tts-rest-api">Source on GitHub</a>
+  </footer>
+
+  <script>
+    fetch('./versions.json', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(versions => {
+        const list = document.getElementById('versions-list');
+        if (!Array.isArray(versions) || versions.length === 0) {
+          list.innerHTML = '<li>No versions published yet.</li>';
+          return;
+        }
+        list.innerHTML = '';
+        versions.forEach((v, i) => {
+          const li = document.createElement('li');
+          const left = document.createElement('span');
+          const link = document.createElement('a');
+          link.href = `./${v}/`;
+          link.className = 'version-tag';
+          link.textContent = v;
+          left.appendChild(link);
+          if (i === 0) {
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = 'latest';
+            left.appendChild(badge);
+          }
+          li.appendChild(left);
+          const schemaLink = document.createElement('a');
+          schemaLink.href = `./${v}/openapi.json`;
+          schemaLink.className = 'schema-link';
+          schemaLink.textContent = 'schema';
+          li.appendChild(schemaLink);
+          list.appendChild(li);
+        });
+      })
+      .catch(() => {
+        document.getElementById('versions-list').innerHTML = '<li>Failed to load versions.</li>';
+      });
+  </script>
+</body>
+</html>

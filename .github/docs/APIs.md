@@ -5,17 +5,23 @@ How the audio pipeline works?
 1. `piper --output-raw` writes signed 16-bit little-endian mono PCM samples to its stdout.
 2. ffmpeg reads that raw PCM (`-f s16le -ar <rate> -ac 1 -i pipe:0`) and encodes MP3 on the fly.
 3. Here we have two branches:
-   - If client calls `/speak` API: the API streams ffmpeg's MP3 output to the HTTP response with `Transfer-Encoding: chunked`.
-   - If client calls `/synthesize` API: we upload it directly to the object storage.
+   - If client calls `/v1/speak` API: the API streams ffmpeg's MP3 output to the HTTP response with `Transfer-Encoding: chunked`.
+   - If client calls `/v1/synthesize` API: we upload it directly to the object storage.
 
 The PCM sample rate is read once at process startup from the model's `.onnx.json` sidecar (`audio.sample_rate`) and passed to ffmpeg.
+
+Errors are `application/problem+json`.
+
+## Interactive docs
+
+Set `DOCS_ENABLED=true` to serve Swagger UI at `/docs` and the OpenAPI document at `/openapi.json` and `/openapi.yaml`. The page loads Swagger UI from `unpkg.com`. `make schema` writes the document to `docs/openapi.json` without starting the service.
 
 ## `GET /health`
 
 - Synchronous health check.
 - Response `200 OK`, `text/plain` body.
 
-## `POST /speak`
+## `POST /v1/speak`
 
 - Synchronous text-to-speech.
 - Generates and streams an MP3 file directly in the HTTP response.
@@ -31,20 +37,21 @@ The PCM sample rate is read once at process startup from the model's `.onnx.json
   - `Transfer-Encoding: chunked`.
   - `Body`: MP3 audio stream, read until the stream ends.
 - Errors:
-  - `400`: invalid JSON or empty/missing text.
+  - `400`: malformed JSON or empty body.
   - `413`: payload too large.
+  - `422`: blank or missing text.
   - `500`: synthesis or transcoding failure.
 - Example:
 
   ```shell
   # JSON
-  curl -X POST http://localhost:3000/speak \
+  curl -X POST http://localhost:3000/v1/speak \
        -H 'content-type: application/json' \
        -d '{"text":"Hello from Piper API"}' \
        -o output.mp3
 
   # Plain text
-  curl -X POST http://localhost:3000/speak \
+  curl -X POST http://localhost:3000/v1/speak \
        -H 'content-type: text/plain' \
        --data 'Hello from plain text' \
        -o output.mp3
@@ -53,11 +60,11 @@ The PCM sample rate is read once at process startup from the model's `.onnx.json
 <details>
 <summary>Learn more about concurrency & cancellation for this endpoint</summary>
 
-`POST /speak` is gated by an in-memory semaphore sized by `MAX_CONCURRENCY` (default `10`). The slot is held **for the entire lifetime of the work** — body parsing, piper synthesis, ffmpeg encoding, and streaming to the client — not just until child processes are spawned. So `MAX_CONCURRENCY` is an honest end-to-end concurrency cap.
+`POST /v1/speak` is gated by an in-memory semaphore sized by `MAX_CONCURRENCY` (default `10`). The slot is held **for the entire lifetime of the work** — body parsing, piper synthesis, ffmpeg encoding, and streaming to the client — not just until child processes are spawned. So `MAX_CONCURRENCY` is an honest end-to-end concurrency cap.
 
 When a client closes the connection before the response is fully sent (e.g. the user navigates away, the upstream service aborts via `AbortController`, or curl is `Ctrl-C`'d), the server kills the in-flight `piper` and `ffmpeg` child processes via `SIGKILL` and waits for them to exit before releasing the semaphore slot.
 
-The net effect: **aborting an in-flight `/speak` request immediately frees a concurrency slot**, so a queued or subsequent request can start synthesis without waiting for the cancelled one to run to completion. This is useful for callers that implement supersede-with-retry patterns — a force-regenerate, for example, can cancel an in-flight TTS HTTP call to free CPU on the TTS host before kicking off a new one.
+The net effect: **aborting an in-flight `/v1/speak` request immediately frees a concurrency slot**, so a queued or subsequent request can start synthesis without waiting for the cancelled one to run to completion. This is useful for callers that implement supersede-with-retry patterns — a force-regenerate, for example, can cancel an in-flight TTS HTTP call to free CPU on the TTS host before kicking off a new one.
 
 > [!NOTE]
 >
@@ -72,7 +79,7 @@ The net effect: **aborting an in-flight `/speak` request immediately frees a con
 <details>
 <summary>Learn more about performance characteristics of this endpoint</summary>
 
-Each `/speak` request spawns a fresh `piper` child process which loads the ONNX voice model (~61 MB for the bundled medium-quality voices) and initialises the ONNX runtime before it can begin synthesis. This adds a fixed **~1.7–2 s of cold-start cost per request**, on top of the actual synthesis time.
+Each `/v1/speak` request spawns a fresh `piper` child process which loads the ONNX voice model (~61 MB for the bundled medium-quality voices) and initialises the ONNX runtime before it can begin synthesis. This adds a fixed **~1.7–2 s of cold-start cost per request**, on top of the actual synthesis time.
 
 This service is deliberately **not** optimised for lowest-latency-per-request or highest-throughput workloads. The CLI we drive (`piper --output-raw`) has no daemon mode, so a long-lived in-memory model is not on the table without rewriting against piper's Python library. If your use case is latency-sensitive (e.g. interactive UI feedback), drive piper from Python with a single long-lived model handle instead of going through this REST API.
 
@@ -80,7 +87,7 @@ For batch / offline-narration workloads — which is what this service is design
 
 </details>
 
-## `POST /synthesize`
+## `POST /v1/synthesize`
 
 - Asynchronous TTS.
 - Creates a long-running job, generates the MP3, and uploads it to a client-managed object store.
@@ -117,15 +124,16 @@ For batch / offline-narration workloads — which is what this service is design
   ```
   **Note**: A 202 does **NOT** mean the MP3 is ready, the job is queued.
 - Errors:
-  - `400`: malformed or invalid request.
+  - `400`: malformed JSON or empty body.
   - `413`: payload too large (configured by `SYNTHESIZE_MAX_BODY_SIZE_BYTES`).
+  - `422`: missing or blank field, or a callback URL that breaks the policy (the `errors` list says which field and rule).
   - `503`: RabbitMQ publish failed.
 - Security:
   - Use HTTPS endpoints in production: the service enforces this by default (see configuration below).
   - Presigned URLs are redacted in logs; only the deliberate redaction‑failure path writes full URLs, so keep log retention short and restrict access.
 - Example:
   ```shell
-  curl -X POST http://localhost:3000/synthesize \
+  curl -X POST http://localhost:3000/v1/synthesize \
        -H 'Content-Type: application/json' \
        -H 'Authorization: Bearer or-basic-piper-tts-rest-api-does-not-care' \
        -d '{
@@ -149,7 +157,7 @@ Here is how it would look like:
 
 ```mermaid
 stateDiagram-v2
-  [*] --> accepted: POST /synthesize → 202
+  [*] --> accepted: POST /v1/synthesize → 202
   accepted --> queued: confirmed RabbitMQ publish
   queued --> generating
   generating --> getting_upload_url

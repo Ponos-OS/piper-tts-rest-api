@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import TypedDict, Optional
 
-API_URL = "http://localhost:3000/speak"
+API_URL = "http://localhost:3000/v1/speak"
 OUTPUT_DIR = "output"
 
 

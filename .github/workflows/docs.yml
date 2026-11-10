@@ -1,0 +1,130 @@
+name: Publish API docs
+
+# Triggered after the Release workflow succeeds on main.
+# 1. Reads the tag semantic-release just created.
+# 2. Regenerates docs/openapi.json via `make schema`.
+# 3. Renders it into a static Redoc site.
+# 4. Commits it back to main under docs/v<version>/ + docs/latest/.
+
+on:
+  workflow_run:
+    workflows: ["Release Docker image"]
+    types:
+      - completed
+    branches:
+      - main
+  # Manual re-runs: useful when you need to rebuild the docs for the current latest tag
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish_docs:
+    name: Build + publish versioned API docs
+    runs-on: ubuntu-latest
+    # Run on manual dispatches, and on successful completions of the release workflow.
+    # Skips failed release runs.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout main (after release)
+        uses: actions/checkout@v4
+        with:
+          # We need tags to resolve the version semantic-release just cut.
+          fetch-depth: 0
+          ref: main
+          persist-credentials: true
+
+      - name: Resolve latest release tag
+        id: version
+        run: |
+          set -eu
+          tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [ -z "$tag" ]; then
+            echo "No release tag found; aborting docs publish."
+            exit 1
+          fi
+          # semantic-release tags look like v1.2.3; keep the v-prefix so it matches the git tag exactly.
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Publishing docs for $tag"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Regenerate docs/openapi.json from the released code
+        env:
+          VERSION_TAG: ${{ steps.version.outputs.tag }}
+        run: SERVICE_VERSION="${VERSION_TAG#v}" make schema
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build docs site into docs/${{ steps.version.outputs.tag }}
+        env:
+          VERSION_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -eu
+
+          # E.g. docs/v1.0.1
+          out="docs/$VERSION_TAG"
+
+          # Wipe any previous build for the same tag (idempotent re-runs).
+          rm -rf "$out"
+          mkdir -p "$out"
+
+          # Redoc renders a single self-contained index.html from the OpenAPI schema. docs/redocly-theme.yaml hides Redoc's own blob-URL download button and forces a dark theme.
+          npx --yes @redocly/cli@1 build-docs docs/openapi.json --config docs/redocly-theme.yaml --output "$out/index.html"
+
+          # Ship the raw schema alongside the HTML so it's always fetchable per-version.
+          cp docs/openapi.json "$out/openapi.json"
+
+          # Inject the version-switcher script, plus a dark page background.
+          switcher_script="  <script>window.PIPER_DOCS_VERSION=\"$VERSION_TAG\";</script>\n  <script src=\"../version-switcher.js\" defer></script>\n  <style>html,body{background:#0d0d0d}</style>\n</head>"
+          awk -v repl="$switcher_script" '{ gsub("</head>", repl); print }' "$out/index.html" > "$out/index.html.tmp"
+          mv "$out/index.html.tmp" "$out/index.html"
+
+      - name: Refresh docs/latest and docs/versions.json
+        env:
+          VERSION_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -eu
+
+          # Point /latest/ at the new version.
+          rm -rf docs/latest
+          cp -R "docs/$VERSION_TAG" docs/latest
+
+          # Regenerate versions.json (newest first) by scanning docs/ for vX.Y.Z dirs.
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+
+          version_re = re.compile(r'^v\d+\.\d+\.\d+([\-+].+)?$')
+          docs = Path('docs')
+          versions = sorted(
+              (p.name for p in docs.iterdir() if p.is_dir() and version_re.match(p.name)),
+              key=lambda s: [int(x) for x in re.findall(r'\d+', s.split('-')[0].split('+')[0])],
+              reverse=True,
+          )
+          (docs / 'versions.json').write_text(json.dumps(versions, indent=2) + '\n')
+          print(f"versions.json: {versions}")
+          PY
+
+      - name: Commit + push docs to main
+        env:
+          VERSION_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -eu
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          if git diff --cached --quiet; then
+            echo "No docs changes to commit."
+            exit 0
+          fi
+          # [skip ci] avoids re-triggering the release workflow on this docs-only commit.
+          git commit -m "docs: publish ${VERSION_TAG} [skip ci]"
+          git push origin main

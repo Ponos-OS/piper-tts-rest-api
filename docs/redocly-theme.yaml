@@ -1,0 +1,26 @@
+# Redoc's middle content panel has no background-color theme option at all. So it always shows through to the page background. That's why this is an always-dark theme rather than one that follows the OS light/dark preference. We inject a dark `html,body` background.
+theme:
+  openapi:
+    hideDownloadButton: true
+    theme:
+      colors:
+        primary:
+          main: "#60a5fa"
+        text:
+          primary: "#e5e5e5"
+          secondary: "#a3a3a3"
+        border:
+          dark: "rgba(255,255,255,0.1)"
+          light: "#262626"
+      schema:
+        nestedBackground: "#1a1a1a"
+      typography:
+        code:
+          color: "#ff8a80"
+          backgroundColor: "rgba(255,255,255,0.08)"
+      sidebar:
+        backgroundColor: "#171717"
+        textColor: "#e5e5e5"
+      fab:
+        backgroundColor: "#262626"
+        color: "#60a5fa"

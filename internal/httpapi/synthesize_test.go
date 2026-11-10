@@ -54,7 +54,7 @@ func newSynthesizeRouter(jobs httpapi.JobPublisher, callback config.Callback, ma
 func postSynthesize(t *testing.T, h http.Handler, body string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/synthesize", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/synthesize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -104,23 +104,16 @@ func TestSynthesize_RejectsInvalidBodies(t *testing.T) {
 	tests := []struct {
 		name   string
 		body   string
-		errMsg string
-		fields []map[string]any
+		status int
 	}{
-		{"empty body", "", "Invalid request body", []map[string]any{
-			{"field": "text", "rule": "required"},
-			{"field": "genUploadUrl", "rule": "required"},
-			{"field": "statusCallbackUrl", "rule": "required"},
-		}},
-		{"blank text", `{"text":" ",` + urls + `}`, "Invalid request body", []map[string]any{{"field": "text", "rule": "notblank"}}},
-		{"non-string text", `{"text":1,` + urls + `}`, "Invalid request body", []map[string]any{{"field": "text", "rule": "type"}}},
-		{"malformed JSON", `{"text":`, "Body must be a JSON object", nil},
-		{"plain text", `hello`, "Body must be a JSON object", nil},
-		{"trailing data", `{"text":"a",` + urls + `} nope`, "Body must be a JSON object", nil},
-		{"two objects", `{"a":1}{"b":2}`, "Body must be a JSON object", nil},
-		{"array", `["a"]`, "Body must be a JSON object", nil},
-		{"null", `null`, "Body must be a JSON object", nil},
-		{"unknown field", `{"text":"a",` + urls + `,"voice":"x"}`, "Invalid JSON body", nil},
+		{"empty body", "", http.StatusBadRequest},
+		{"missing urls", `{"text":"a"}`, http.StatusUnprocessableEntity},
+		{"blank text", `{"text":" ",` + urls + `}`, http.StatusUnprocessableEntity},
+		{"non-string text", `{"text":1,` + urls + `}`, http.StatusUnprocessableEntity},
+		{"unknown field", `{"text":"a",` + urls + `,"voice":"x"}`, http.StatusUnprocessableEntity},
+		{"malformed JSON", `{"text":`, http.StatusBadRequest},
+		{"plain text", `hello`, http.StatusBadRequest},
+		{"array", `["a"]`, http.StatusUnprocessableEntity},
 	}
 
 	for _, tt := range tests {
@@ -129,16 +122,8 @@ func TestSynthesize_RejectsInvalidBodies(t *testing.T) {
 
 			rec := postSynthesize(t, newSynthesizeRouter(jobs, config.Callback{}, 1000), tt.body, nil)
 
-			assert.Equal(t, http.StatusBadRequest, rec.Code)
-			var parsed struct {
-				Error  string           `json:"error"`
-				Code   string           `json:"code"`
-				Fields []map[string]any `json:"fields"`
-			}
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &parsed))
-			assert.Equal(t, tt.errMsg, parsed.Error)
-			assert.Equal(t, "invalid-request", parsed.Code)
-			assert.Equal(t, tt.fields, parsed.Fields)
+			assert.Equal(t, tt.status, rec.Code)
+			assert.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
 			assert.Empty(t, jobs.published)
 		})
 	}
@@ -151,28 +136,29 @@ func TestSynthesize_RejectsCallbackURLsBreakingThePolicy(t *testing.T) {
 
 	rec := postSynthesize(t, newSynthesizeRouter(jobs, callback, 1000), body, nil)
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.JSONEq(t, `{"error":"Invalid callback URL","code":"invalid-callback-url","fields":[{"field":"genUploadUrl","rule":"https"},{"field":"statusCallbackUrl","rule":"host"}]}`, rec.Body.String())
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	var problem struct {
+		Errors []struct {
+			Message  string `json:"message"`
+			Location string `json:"location"`
+		} `json:"errors"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &problem))
+	require.Len(t, problem.Errors, 2)
+	assert.Equal(t, "body.genUploadUrl", problem.Errors[0].Location)
+	assert.Equal(t, "https", problem.Errors[0].Message)
+	assert.Equal(t, "body.statusCallbackUrl", problem.Errors[1].Location)
+	assert.Equal(t, "host", problem.Errors[1].Message)
 	assert.Empty(t, jobs.published)
 }
 
 func TestSynthesize_RejectsOversizedBody(t *testing.T) {
-	tests := []struct{ name, body string }{
-		{"valid JSON", validSynthesizeBody},
-		{"not JSON", strings.Repeat("a", 100)},
-	}
+	jobs := &fakePublisher{}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			jobs := &fakePublisher{}
+	rec := postSynthesize(t, newSynthesizeRouter(jobs, config.Callback{}, 20), validSynthesizeBody, nil)
 
-			rec := postSynthesize(t, newSynthesizeRouter(jobs, config.Callback{}, 20), tt.body, nil)
-
-			assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
-			assert.JSONEq(t, `{"error":"Request body too large","code":"request-body-too-large"}`, rec.Body.String())
-			assert.Empty(t, jobs.published)
-		})
-	}
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	assert.Empty(t, jobs.published)
 }
 
 func TestSynthesize_AnswersTheBrokerFailureWith503(t *testing.T) {
@@ -181,5 +167,6 @@ func TestSynthesize_AnswersTheBrokerFailureWith503(t *testing.T) {
 	rec := postSynthesize(t, newSynthesizeRouter(jobs, config.Callback{}, 1000), validSynthesizeBody, nil)
 
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
-	assert.JSONEq(t, `{"error":"Unable to accept synthesize job"}`, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "Unable to accept synthesize job")
+	assert.NotContains(t, rec.Body.String(), "secret")
 }

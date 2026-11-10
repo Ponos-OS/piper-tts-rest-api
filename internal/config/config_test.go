@@ -60,6 +60,7 @@ func TestLoad_ReadsEveryVariable(t *testing.T) {
 		"SERVICE_NAME":                          "tts",
 		"SERVICE_VERSION":                       "4.1.0",
 		"APP_ENV":                               "staging",
+		"DOCS_ENABLED":                          "true",
 		"MAX_CONCURRENCY":                       "4",
 		"PIPER_MODEL":                           "/m/voice.onnx",
 		"MAX_BODY_SIZE_BYTES":                   "1000",
@@ -97,7 +98,7 @@ func TestLoad_ReadsEveryVariable(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, config.Config{
-		Service:          config.Service{Port: 8080, Name: "tts", Version: "4.1.0", Env: "staging"},
+		Service:          config.Service{Port: 8080, Name: "tts", Version: "4.1.0", Env: "staging", DocsEnabled: true},
 		MaxConcurrency:   4,
 		PiperModelPath:   "/m/voice.onnx",
 		MaxBodySizeBytes: 1000,

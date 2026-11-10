@@ -10,7 +10,8 @@ bin/
 tools/
 input/
 output/
-local-setup/
+local-setup/*
+!local-setup/backend
 *.log
 *.mp3
 e2e/

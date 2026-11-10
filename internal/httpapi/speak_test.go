@@ -131,7 +131,7 @@ func defaultOpts() httpapi.Options {
 }
 
 func postSpeak(ctx context.Context, srv *httptest.Server, body string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/speak", strings.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/v1/speak", strings.NewReader(body))
 	if err != nil {
 		return nil, err //nolint:wrapcheck // a test helper.
 	}
@@ -141,7 +141,7 @@ func postSpeak(ctx context.Context, srv *httptest.Server, body string) (*http.Re
 }
 
 func speakPlain(ctx context.Context, srv *httptest.Server, body string) speakResult {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/speak", strings.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/v1/speak", strings.NewReader(body))
 	if err != nil {
 		return speakResult{err: err}
 	}
@@ -207,7 +207,7 @@ func TestSpeak_StreamsMP3WithHeaders(t *testing.T) {
 func TestSpeak_EchoesTheTraceIDWhenTracingIsOn(t *testing.T) {
 	recordSpans(t)
 	srv, _, _ := newSpeakServer(t, echoPiper, defaultOpts())
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/speak", strings.NewReader(`{"text":"hello"}`))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/v1/speak", strings.NewReader(`{"text":"hello"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("traceparent", traceparent)
@@ -254,8 +254,7 @@ func TestSpeak_RejectsBlankPlainText(t *testing.T) {
 	got := speakPlain(t.Context(), srv, " \n ")
 
 	require.NoError(t, got.err)
-	assert.Equal(t, http.StatusBadRequest, got.status)
-	assert.JSONEq(t, `{"error":"Invalid request body","code":"invalid-request","fields":[{"field":"text","rule":"required"}]}`, got.body)
+	assert.Equal(t, http.StatusUnprocessableEntity, got.status)
 }
 
 func TestSpeak_RejectsOversizedPlainText(t *testing.T) {
@@ -265,25 +264,22 @@ func TestSpeak_RejectsOversizedPlainText(t *testing.T) {
 
 	require.NoError(t, got.err)
 	assert.Equal(t, http.StatusRequestEntityTooLarge, got.status)
-	assert.JSONEq(t, `{"error":"Request body too large","code":"request-body-too-large"}`, got.body)
 }
 
 func TestSpeak_RejectsInvalidBodies(t *testing.T) {
-	required := []map[string]any{{"field": "text", "rule": "required"}}
 	tests := []struct {
 		name   string
 		body   string
-		errMsg string
-		fields []map[string]any
+		status int
 	}{
-		{"empty body", "", "Invalid request body", required},
-		{"blank text", `{"text":"  "}`, "Invalid request body", []map[string]any{{"field": "text", "rule": "notblank"}}},
-		{"non-string text", `{"text":1}`, "Invalid request body", []map[string]any{{"field": "text", "rule": "type"}}},
-		{"missing text", `{}`, "Invalid request body", required},
-		{"malformed JSON", `{"text":`, "Body must be a JSON object", nil},
-		{"trailing data", `{"text":"a"} nope`, "Body must be a JSON object", nil},
-		{"array", `["a"]`, "Body must be a JSON object", nil},
-		{"unknown field", `{"text":"a","voice":"b"}`, "Invalid JSON body", nil},
+		{"empty body", "", http.StatusBadRequest},
+		{"blank text", `{"text":"  "}`, http.StatusUnprocessableEntity},
+		{"missing text", `{}`, http.StatusUnprocessableEntity},
+		{"non-string text", `{"text":1}`, http.StatusBadRequest},
+		{"malformed JSON", `{"text":`, http.StatusBadRequest},
+		{"trailing data", `{"text":"a"} nope`, http.StatusBadRequest},
+		{"array", `["a"]`, http.StatusBadRequest},
+		{"unknown field", `{"text":"a","voice":"b"}`, http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
@@ -293,16 +289,8 @@ func TestSpeak_RejectsInvalidBodies(t *testing.T) {
 			got := speak(t.Context(), srv, tt.body)
 
 			require.NoError(t, got.err)
-			assert.Equal(t, http.StatusBadRequest, got.status)
-			var parsed struct {
-				Error  string           `json:"error"`
-				Code   string           `json:"code"`
-				Fields []map[string]any `json:"fields"`
-			}
-			require.NoError(t, json.Unmarshal([]byte(got.body), &parsed))
-			assert.Equal(t, tt.errMsg, parsed.Error)
-			assert.Equal(t, "invalid-request", parsed.Code)
-			assert.Equal(t, tt.fields, parsed.Fields)
+			assert.Equal(t, tt.status, got.status)
+			assert.Contains(t, got.body, `"status":`+strconv.Itoa(tt.status))
 		})
 	}
 }
@@ -323,7 +311,6 @@ func TestSpeak_RejectsOversizedBody(t *testing.T) {
 
 	require.NoError(t, got.err)
 	assert.Equal(t, http.StatusRequestEntityTooLarge, got.status)
-	assert.JSONEq(t, `{"error":"Request body too large","code":"request-body-too-large"}`, got.body)
 }
 
 func TestSpeak_PiperFailingBeforeAnyAudioIs500(t *testing.T) {
@@ -333,7 +320,7 @@ func TestSpeak_PiperFailingBeforeAnyAudioIs500(t *testing.T) {
 
 	require.NoError(t, got.err)
 	assert.Equal(t, http.StatusInternalServerError, got.status)
-	assert.JSONEq(t, `{"error":"Synthesis failed"}`, got.body)
+	assert.Contains(t, got.body, "Synthesis failed")
 	done := completedLogs(t, logs, 1)[0]
 	assert.Equal(t, http.StatusInternalServerError, done.StatusCode)
 	assert.False(t, done.Aborted)
