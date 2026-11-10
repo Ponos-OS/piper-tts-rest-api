@@ -1,15 +1,16 @@
 ## 🚀 Quick Start
 
 ```shell
-pnpm run init
+make init # downloads the Go modules and creates .env
 ```
 
 ### Test Locally
 
 ```bash
 ./test.sh # Single request test
-pnpm test
-pnpm test:e2e
+make test             # unit tests
+make integration_test # needs Docker
+make lint_check
 ```
 
 To test the service under load:
@@ -36,7 +37,7 @@ To release a new version your [commit message should follow these rules](https:/
 This repository is configured to auto-release Docker images from `Dockerfile` using Conventional Commits.
 
 - Workflow: `.github/workflows/dockerhub-release.yml`.
-- Release config: `.releaserc.json` ([semantic-release](https://www.npmjs.com/package/semantic-release)).
+- Release config: `.releaserc.json` ([semantic-release](https://www.npmjs.com/package/semantic-release)). The version is passed to the image as the `SERVICE_VERSION` build argument.
 - Trigger: push to `main`.
 
 How versioning works:
@@ -56,7 +57,7 @@ For each release, the workflow builds from `Dockerfile` and pushes:
 
 1. Simpler is better - do not overcomplicate.
 2. Prefer early returns over nested conditionals.
-3. Use vitest.
+3. Use Go's `testing` package with testify (`require` for preconditions, `assert` for checks).
    - Use [AAA (Arrange, Act, Assert) style of writing test](https://stackoverflow.com/tags/arrange-act-assert/info).
 4. IMPORTANT: Avoid overly defensive programming; avoid insistence checks; only manage exceptions when necessary.
 5. Use latest version of libraries and idiomatic approaches as of today.

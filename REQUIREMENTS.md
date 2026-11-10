@@ -347,6 +347,20 @@ Notes for review:
 
 ### 13. Tests, image, CI, cutover
 
+Split like step 10, because each part is reviewable on its own:
+
+- 13A: Dockerfile, release config and workflow, docs.
+- 13B: port the e2e and load tests (`tests/`, `load_test.py`).
+- 13C: lefthook replaces husky, compare against the TS source, delete the TS files.
+
+Done in 13A:
+
+- Dockerfile: Go builder stage (`golang:1.26.8-bookworm`, `CGO_ENABLED=0`, static binary), runtime stage `debian:bookworm-slim` with the same Python venv, `piper-tts`, ffmpeg, curl and the eight voices as before. The non-root user is `app` (uid 1000, the uid the compose file already uses). `ARG SERVICE_VERSION` sets `ENV SERVICE_VERSION` in the last layer. `.dockerignore` no longer lists Node paths and keeps tests, `tools` and `local-setup` out of the context.
+- Checked: the image builds (2.2 GB, almost all of it the voices and onnxruntime), runs as uid 1000, reports `SERVICE_VERSION`, and with RabbitMQ 4.4 beside it `POST /speak` returned a real MP3 (ID3 tag, MPEG layer III, 22.05 kHz) from real Piper and ffmpeg. The first request took 9 s (cold model).
+- Release: the workflow drops pnpm and runs semantic-release with `npx` (it is a Node tool, so `setup-node` stays). `.releaserc.json` drops `@semantic-release/npm` and `@semantic-release/git`: there is no `package.json` to bump, and the version is the git tag. The exec plugin passes `--build-arg SERVICE_VERSION=${nextRelease.version}`. Not run here: it only runs on `main` with the Docker Hub token.
+- Docs: README, CONTRIBUTING (make targets, testify instead of vitest), `config.md` (`NODE_ENV` is `APP_ENV`; internal service names must be in `SYNTHESIZE_CALLBACK_ALLOWED_HOSTS`; plain HTTP needs `SYNTHESIZE_REQUIRE_HTTPS_CALLBACKS=false`), `.env.example`.
+- Left for 13B/13C: `compose.yml` needs no change for the app (it builds the Dockerfile); `test.sh` and the e2e specs still describe the TS flow.
+
 - Port `tests/` e2e (RabbitMQ and object storage via testcontainers) and the load test expectations.
 - Local builds go to `bin/` (`go build -o bin/<name> ./cmd/<name>`), which is gitignored; `dist/` is not used.
 - Dockerfile: multi-stage build with a Go builder; the runtime stage still needs Python venv with `piper-tts`, ffmpeg, voice models, so only the Node/pnpm parts disappear. Non-root user and healthcheck stay.

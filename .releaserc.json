@@ -42,12 +42,10 @@
       "@semantic-release/release-notes-generator",
       { "preset": "conventionalcommits" }
     ],
-    ["@semantic-release/npm", { "npmPublish": false }],
-    ["@semantic-release/git", { "assets": ["package.json", "pnpm-lock.yaml"] }],
     [
       "@semantic-release/exec",
       {
-        "publishCmd": "docker build -f Dockerfile -t $DOCKERHUB_REPOSITORY:${nextRelease.version} -t $DOCKERHUB_REPOSITORY:latest . && docker push $DOCKERHUB_REPOSITORY:${nextRelease.version} && docker push $DOCKERHUB_REPOSITORY:latest"
+        "publishCmd": "docker build -f Dockerfile --build-arg SERVICE_VERSION=${nextRelease.version} -t $DOCKERHUB_REPOSITORY:${nextRelease.version} -t $DOCKERHUB_REPOSITORY:latest . && docker push $DOCKERHUB_REPOSITORY:${nextRelease.version} && docker push $DOCKERHUB_REPOSITORY:latest"
       }
     ],
     "@semantic-release/github"

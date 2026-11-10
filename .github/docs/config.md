@@ -27,7 +27,7 @@ You can configure and setup this image using env variables.
       <td>HTTP port.</td>
     </tr>
     <tr>
-      <td>NODE_ENV</td>
+      <td>APP_ENV</td>
       <td>production</td>
       <td><code>development</code> / <code>test</code> relaxes HTTPS requirement.</td>
     </tr>
@@ -262,12 +262,12 @@ Alert on sustained queue age/depth, any unexpected DLQ growth, elevated terminal
     <tr>
       <td>SYNTHESIZE_REQUIRE_HTTPS_CALLBACKS</td>
       <td>true (except dev/test)</td>
-      <td>Enforce HTTPS for callback URLs.</td>
+      <td>Enforce HTTPS for callback URLs. Set to <code>false</code> to call plain-HTTP endpoints, for example internal services.</td>
     </tr>
     <tr>
       <td>SYNTHESIZE_CALLBACK_ALLOWED_HOSTS</td>
       <td>(empty)</td>
-      <td>Comma‑separated hostnames allowed for callbacks, empty means any valid HTTP(S) host.</td>
+      <td>Comma‑separated hostnames allowed for callbacks; empty means any host. The worker refuses to connect to non-public addresses (private, loopback, link-local) unless the host is listed here, so internal service names such as <code>minio</code> or <code>wiremock</code> must be listed.</td>
     </tr>
     <tr>
       <td>RABBITMQ_URL</td>

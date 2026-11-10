@@ -19,13 +19,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # semantic-release is a Node tool; the service itself is Go.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -52,12 +50,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKERHUB_REPOSITORY: 9109679196/piper-tts-rest-api
         run: |
-          pnpm dlx \
+          npx --yes \
             --package semantic-release@24.2.9 \
             --package @semantic-release/commit-analyzer@13.0.1 \
             --package @semantic-release/release-notes-generator@14.1.0 \
-            --package @semantic-release/npm \
-            --package @semantic-release/git \
             --package @semantic-release/exec@7.1.0 \
             --package @semantic-release/github@11.0.6 \
             --package conventional-changelog-conventionalcommits@9.1.0 \

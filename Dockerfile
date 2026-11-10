@@ -1,4 +1,13 @@
-FROM node:24.18.1-bookworm-slim
+FROM golang:1.26.8-bookworm AS build
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+
+FROM debian:bookworm-slim
 
 # Use bash and pipefail for safer builds
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -13,7 +22,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 
 WORKDIR $APP_DIR
 
-# System deps, pnpm, Python venv, piper packages, and voice models
+# System deps, Python venv, piper packages, and voice models
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
@@ -22,7 +31,6 @@ RUN set -eux; \
             python3-pip \
             python3-venv; \
     rm -rf /var/lib/apt/lists/*; \
-    npm install -g pnpm; \
     python3 -m venv "$VENV_DIR"; \
     "$VENV_DIR/bin/pip" install --upgrade pip; \
     "$VENV_DIR/bin/pip" install piper-tts pathvalidate; \
@@ -32,24 +40,20 @@ RUN set -eux; \
         f="en_US-${v}-medium.${ext}"; \
         curl -fsSL "$HF_BASE/$v/medium/$f" -o "$MODELS_DIR/$f"; \
       done; \
-    done
+    done; \
+    groupadd --gid 1000 app; \
+    useradd --uid 1000 --gid 1000 --no-create-home app
 
 # Export venv PATH and default model
 ENV PATH="$VENV_DIR/bin:${PATH}" \
     PIPER_MODEL=/app/models/en_US-lessac-medium.onnx
 
-# Disable husky in Docker builds
-ENV HUSKY=0
+COPY --from=build /out/server /app/server
 
-# Install app dependencies as non-root and avoid a separate chown layer
-COPY --chown=node:node package.json pnpm-lock.yaml tsconfig.json tsconfig.build.json ./
-RUN pnpm install --frozen-lockfile
+# The release version, reported as service.version. Declared last so a new version only rebuilds this layer.
+ARG SERVICE_VERSION=unknown
+ENV SERVICE_VERSION=$SERVICE_VERSION
 
-COPY --chown=node:node src ./src
-RUN pnpm build && pnpm prune --prod
-
-# Make /app and everything in it owned by `node` so pnpm can write its runtime temp files (and so bind-mounted dev workflows produce host-deletable files).
-RUN chown -R node:node /app
-
-USER node
-CMD ["pnpm", "start"]
+USER app
+EXPOSE 3000
+CMD ["/app/server"]
