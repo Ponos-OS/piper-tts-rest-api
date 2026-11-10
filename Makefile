@@ -14,10 +14,11 @@ help:
 	@awk '/^## /{desc = substr($$0, 4)} /^[a-zA-Z_-]+:/{if (desc) {target = $$1; sub(/:.*/, "", target); printf "  make %-20s- %s\n", target, desc; desc = ""}}' $(MAKEFILE_LIST)
 	@echo ""
 
-## Initialize project (download dependencies, create .env)
+## Initialize project (download dependencies, install git hooks, create .env)
 init:
 	go mod download
 	go mod download -modfile=tools/go.mod
+	go tool -modfile=tools/go.mod lefthook install
 	cp --update=none .env.example .env || true
 
 ## Starts the app with variables from .env

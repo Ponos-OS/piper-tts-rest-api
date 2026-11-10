@@ -55,14 +55,14 @@ func (s *speaker) handleSpeak(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.slots.release()
 
-	req, err := decodeJSON[speakRequest](w, r, s.maxBody)
+	text, err := readSpeakText(w, r, s.maxBody)
 	if err != nil {
 		writeBodyError(w, r, s.log, err)
 
 		return
 	}
 
-	stream, err := s.synth.Synthesize(ctx, strings.TrimSpace(req.Text))
+	stream, err := s.synth.Synthesize(ctx, text)
 	if err != nil {
 		s.log.ErrorContext(ctx, "Synthesis failed to start", slog.Any(keyError, err))
 		writeJSON(w, http.StatusInternalServerError, errorBody{Error: "Synthesis failed"})
@@ -73,6 +73,27 @@ func (s *speaker) handleSpeak(w http.ResponseWriter, r *http.Request) {
 	defer stream.Close() //nolint:errcheck,gosec // it kills what is left; its error cannot change the response.
 
 	s.stream(w, r, stream)
+}
+
+// readSpeakText returns the text to speak: the "text" field of a JSON body, or the whole body for any other content type.
+func readSpeakText(w http.ResponseWriter, r *http.Request, maxBytes int) (string, error) {
+	raw, err := readBody(w, r, maxBytes)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+		req, err := decodeJSON[speakRequest](raw)
+
+		return strings.TrimSpace(req.Text), err
+	}
+
+	text := strings.TrimSpace(string(raw))
+	if text == "" {
+		return "", &validationError{Fields: []fieldError{{Field: "text", Rule: "required"}}}
+	}
+
+	return text, nil
 }
 
 // stream sends the MP3 to the client. After the first chunk a failure aborts the connection, so the client sees a truncated response instead of a complete-looking one.

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 var (
 	errBodyTooLarge = errors.New("request body too large")
 	errInvalidJSON  = errors.New("invalid JSON body")
-	errTrailingData = errors.New("unexpected data after JSON value")
+	errNotObject    = errors.New("body is not a JSON object")
 )
 
 // fieldError says which JSON field broke which rule.
@@ -61,27 +62,42 @@ func newValidate() *validator.Validate {
 	return v
 }
 
-// decodeJSON reads one JSON object of type T from the request body and validates it
-// against T's `validate` tags. Unknown fields are rejected.
-// Errors: errBodyTooLarge, errInvalidJSON (malformed JSON, unknown field, trailing data)
-// or *validationError (wrong JSON type, or a failed rule). An empty body counts as {}.
-func decodeJSON[T any](w http.ResponseWriter, r *http.Request, maxBytes int) (T, error) {
-	var dst T
-
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, int64(maxBytes)))
-	dec.DisallowUnknownFields()
-
-	err := dec.Decode(&dst)
-	if err == nil {
-		err = rejectTrailingData(dec)
+// readBody reads the whole request body, failing with errBodyTooLarge past maxBytes.
+func readBody(w http.ResponseWriter, r *http.Request, maxBytes int) ([]byte, error) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(maxBytes)))
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return nil, errBodyTooLarge
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
 	}
 
-	var tooLarge *http.MaxBytesError
+	return raw, nil
+}
+
+// decodeJSON decodes one JSON object of type T from raw and validates it
+// against T's `validate` tags. Unknown fields are rejected.
+// An empty body counts as {}, so it fails the "required" rules.
+// Errors: errNotObject (anything but exactly one JSON object: plain text, trailing data, a scalar, an array),
+// errInvalidJSON (an unknown field) or *validationError (wrong JSON type, or a failed rule).
+func decodeJSON[T any](raw []byte) (T, error) {
+	var dst T
+
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		raw = []byte("{}")
+	}
+	if !json.Valid(raw) || raw[0] != '{' {
+		return dst, errNotObject
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+
 	var wrongType *json.UnmarshalTypeError
-	switch {
-	case err == nil, errors.Is(err, io.EOF):
-	case errors.As(err, &tooLarge):
-		return dst, errBodyTooLarge
+	switch err := dec.Decode(&dst); {
+	case err == nil:
 	case errors.As(err, &wrongType) && wrongType.Field != "":
 		return dst, &validationError{Fields: []fieldError{{Field: wrongType.Field, Rule: "type"}}}
 	default:
@@ -93,15 +109,6 @@ func decodeJSON[T any](w http.ResponseWriter, r *http.Request, maxBytes int) (T,
 	}
 
 	return dst, nil
-}
-
-// rejectTrailingData fails if anything other than whitespace follows the first JSON value.
-func rejectTrailingData(dec *json.Decoder) error {
-	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errTrailingData
-	}
-
-	return nil
 }
 
 func toValidationError(err error) error {

@@ -8,11 +8,8 @@
 README.md
 bin/
 tools/
-node_modules/
-dist/
 input/
 output/
-tests/
 local-setup/
 *.log
 *.mp3

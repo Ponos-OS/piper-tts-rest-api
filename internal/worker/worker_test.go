@@ -481,7 +481,7 @@ func TestProcess_UploadRejectedByStorage(t *testing.T) {
 
 	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	assert.Equal(t, amqp.Ack(), got, "a 403 will not get better: the client is told and the job ends")
+	assert.Equal(t, amqp.Reject(), got, "a 403 will not get better: the client is told and the job is dead-lettered")
 	assert.Contains(t, logs.String(), "upload-failed: HTTP 403")
 	assert.Equal(t, "failed:upload-failed", last(api.statusLog(t)))
 }
@@ -507,7 +507,7 @@ func TestProcess_DoesNotFollowRedirects(t *testing.T) {
 
 	got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-	assert.Equal(t, amqp.Ack(), got)
+	assert.Equal(t, amqp.Reject(), got)
 	assert.Contains(t, logs.String(), "upload-failed: HTTP 302")
 	assert.Zero(t, target.uploadCount())
 }
@@ -705,7 +705,7 @@ func TestProcess_DoesNotRetryWhatWillNotChange(t *testing.T) {
 
 			got := w.Process(t.Context(), jobMessage(t, api.server.URL+"/upload-url"))
 
-			assert.Equal(t, amqp.Ack(), got)
+			assert.Equal(t, amqp.Reject(), got)
 			assert.Equal(t, "failed:upload-url-failed", last(api.statusLog(t)))
 		})
 	}

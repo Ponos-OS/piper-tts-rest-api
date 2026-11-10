@@ -55,9 +55,9 @@ func New(cfg config.Synthesize, synth Synthesizer, logger *slog.Logger) *Worker 
 }
 
 // Process runs one attempt of a job and says what to do with the message:
-// Ack when the file is uploaded or the job failed for a reason a retry cannot fix,
+// Ack when the file is uploaded,
 // Retry when trying again can help and attempts are left,
-// Reject when the message is not a valid job or all attempts are used up: it is kept in the dead-letter queue.
+// Reject when the job failed for good (a retry cannot help, or all attempts are used up) or the message is not a valid job: it is kept in the dead-letter queue.
 func (w *Worker) Process(ctx context.Context, m amqp.Message) amqp.Outcome {
 	job, err := parseJob(m.Body)
 	if err != nil {
@@ -87,8 +87,7 @@ func (w *Worker) Process(ctx context.Context, m amqp.Message) amqp.Outcome {
 	return amqp.Ack()
 }
 
-// afterFailure retries the job or, when that cannot help or attempts ran out, tells the client it failed.
-// A job that ran out of attempts is then dead-lettered.
+// afterFailure retries the job or, when that cannot help or attempts ran out, tells the client it failed and dead-letters the message.
 func (w *Worker) afterFailure(ctx context.Context, job synthesis.Job, m amqp.Message, status *reporter, err error) amqp.Outcome {
 	if ctx.Err() != nil {
 		return amqp.Reject() // shutting down: the consumer ignores this and the job is delivered again.
@@ -108,11 +107,8 @@ func (w *Worker) afterFailure(ctx context.Context, job synthesis.Job, m amqp.Mes
 	}
 
 	status.send(ctx, synthesis.Failed(job.ID, m.Attempt, time.Now(), synthesis.JobError{Code: failure.code, Message: failure.message}))
-	if failure.retryable() {
-		return amqp.Reject() // only the attempt limit stopped it.
-	}
 
-	return amqp.Ack()
+	return amqp.Reject()
 }
 
 func (w *Worker) run(ctx context.Context, job synthesis.Job, m amqp.Message, status *reporter) (int64, error) {

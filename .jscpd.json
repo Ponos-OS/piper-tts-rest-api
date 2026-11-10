@@ -1,7 +1,0 @@
-{
-  "path": ["src"],
-  "ignore": ["**/*.spec.ts"],
-  "threshold": 3,
-  "reporters": ["console"],
-  "gitignore": true
-}

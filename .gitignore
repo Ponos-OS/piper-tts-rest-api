@@ -1,8 +1,4 @@
-node_modules
 output
-dist
-build
-coverage
 *.log
 *.env
 *.mp3

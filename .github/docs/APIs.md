@@ -139,6 +139,7 @@ For batch / offline-narration workloads — which is what this service is design
 <summary>Delivery, retries, and state flow</summary>
 
 - RabbitMQ delivery is at least once.
+- A job that fails for good (a retry cannot help, or all attempts are used) gets the `failed` callback and the message goes to the DLQ `synthesize.dlq`.
 - A worker crash after an object upload and before acknowledgement can repeat the upload and callbacks.
 - We have an idempotency key added to each job status report callback call. But it is up to client where the presigned URL will upload the file. AKA they can be the same place or unique keys each time we request a new presigned upload URL.
 
@@ -162,7 +163,7 @@ stateDiagram-v2
   generating --> failed: terminal failure
   getting_upload_url --> failed: terminal failure
   uploading --> failed: terminal failure
-  failed --> [*]: failed callback attempted; acknowledge
+  failed --> [*]: failed callback attempted; dead-letter
   completed --> [*]
 ```
 

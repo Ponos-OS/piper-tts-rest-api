@@ -1,15 +1,17 @@
 ## 🚀 Quick Start
 
 ```shell
-make init # downloads the Go modules and creates .env
+make init # downloads the Go modules, installs the git hooks and creates .env
 ```
+
+The git hooks (lefthook) run `make lint_check` before a commit, and `make test` and `make integration_test` before a push (Docker needed, about 10 minutes). If `make init` reports that `core.hooksPath` is set, unset it: `git config --unset core.hooksPath` (add `--global` if it is set there).
 
 ### Test Locally
 
 ```bash
 ./test.sh # Single request test
 make test             # unit tests
-make integration_test # needs Docker
+make integration_test # needs Docker; also builds the image and runs the e2e test (about 10 minutes)
 make lint_check
 ```
 

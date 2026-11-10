@@ -32,7 +32,13 @@ type synthesizer struct {
 func (s *synthesizer) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	req, err := decodeJSON[synthesis.Request](w, r, s.maxBody)
+	raw, err := readBody(w, r, s.maxBody)
+	if err != nil {
+		writeBodyError(w, r, s.log, err)
+
+		return
+	}
+	req, err := decodeJSON[synthesis.Request](raw)
 	if err != nil {
 		writeBodyError(w, r, s.log, err)
 
@@ -65,7 +71,7 @@ func (s *synthesizer) writeNormalizeError(w http.ResponseWriter, r *http.Request
 	var invalid *synthesis.ValidationError
 	if !errors.As(err, &invalid) {
 		s.log.ErrorContext(r.Context(), "Normalizing the request failed", slog.Any(keyError, err))
-		writeJSON(w, http.StatusBadRequest, errorBody{Error: "Invalid request"})
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "Invalid request", Code: codeInvalidRequest})
 
 		return
 	}
@@ -74,5 +80,5 @@ func (s *synthesizer) writeNormalizeError(w http.ResponseWriter, r *http.Request
 	for i, v := range invalid.Violations {
 		fields[i] = fieldError{Field: v.Field, Rule: v.Rule}
 	}
-	writeJSON(w, http.StatusBadRequest, errorBody{Error: "Invalid callback URL", Fields: fields})
+	writeJSON(w, http.StatusBadRequest, errorBody{Error: "Invalid callback URL", Code: codeInvalidCallbackURL, Fields: fields})
 }
