@@ -361,6 +361,13 @@ Done in 13A:
 - Docs: README, CONTRIBUTING (make targets, testify instead of vitest), `config.md` (`NODE_ENV` is `APP_ENV`; internal service names must be in `SYNTHESIZE_CALLBACK_ALLOWED_HOSTS`; plain HTTP needs `SYNTHESIZE_REQUIRE_HTTPS_CALLBACKS=false`), `.env.example`.
 - Left for 13B/13C: `compose.yml` needs no change for the app (it builds the Dockerfile); `test.sh` and the e2e specs still describe the TS flow.
 
+Done in 13B:
+
+- `e2e/synthesize_integration_test.go` (tag `integration`, so `make integration_test` runs it) ports both TS specs: the happy path (four statuses, jobId on every callback, MP3 stored with a size above zero) and three concurrent jobs. It builds the Dockerfile and starts RabbitMQ 4.4, Garage (`dxflrs/garage:v2.4.1`, testcontainers module) and WireMock 3.13.1 on one network. Garage replaces MinIO: the service only needs a presigned PUT, and it uses no versioning, object lock, server-side encryption or replication. The presigned URL is made with the AWS SDK v2 against the in-network host name, since the signature covers the host. Both are test-only dependencies; `go list -deps ./cmd/server` shows neither in the binary.
+- Dropped: the Tempo, Loki and collector containers. The TS test started them but asserted nothing on them; tracing was checked by hand in step 12.
+- Not ported: `load_test.py` is a manual script against `POST /speak` and works unchanged; decided in 13C.
+- Checked: the run passed (663 s, most of it the image build). The compose file has no object storage, so nothing changes there.
+
 - Port `tests/` e2e (RabbitMQ and object storage via testcontainers) and the load test expectations.
 - Local builds go to `bin/` (`go build -o bin/<name> ./cmd/<name>`), which is gitignored; `dist/` is not used.
 - Dockerfile: multi-stage build with a Go builder; the runtime stage still needs Python venv with `piper-tts`, ffmpeg, voice models, so only the Node/pnpm parts disappear. Non-root user and healthcheck stay.

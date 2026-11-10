@@ -267,7 +267,7 @@ Alert on sustained queue age/depth, any unexpected DLQ growth, elevated terminal
     <tr>
       <td>SYNTHESIZE_CALLBACK_ALLOWED_HOSTS</td>
       <td>(empty)</td>
-      <td>Comma‑separated hostnames allowed for callbacks; empty means any host. The worker refuses to connect to non-public addresses (private, loopback, link-local) unless the host is listed here, so internal service names such as <code>minio</code> or <code>wiremock</code> must be listed.</td>
+      <td>Comma‑separated hostnames allowed for callbacks; empty means any host. The worker refuses to connect to non-public addresses (private, loopback, link-local) unless the host is listed here, so internal service names such as <code>garage</code> or <code>wiremock</code> must be listed.</td>
     </tr>
     <tr>
       <td>RABBITMQ_URL</td>

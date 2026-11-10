@@ -16,3 +16,4 @@ tests/
 local-setup/
 *.log
 *.mp3
+e2e/
