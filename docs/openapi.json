@@ -130,7 +130,7 @@
   "info": {
     "description": "Text to speech with Piper. /v1/speak streams an MP3; /v1/synthesize queues a job that uploads it.",
     "title": "Piper TTS REST API",
-    "version": "5.0.1"
+    "version": "unknown"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -177,7 +177,7 @@
     },
     "/v1/speak": {
       "post": {
-        "description": "Streams the MP3 in the response, chunked, without a Content-Length. Aborting the request frees its concurrency slot.",
+        "description": "Streams the MP3 in the response, chunked, without a Content-Length.\n\nPiper writes raw PCM to its stdout and ffmpeg encodes it to MP3 on the fly. The PCM sample rate is read once at startup from the model's `.onnx.json` sidecar.\n\n**Concurrency and cancellation.** `MAX_CONCURRENCY` (default 10) caps the requests handled at once. A slot is held for the whole request: parsing, synthesis, encoding and streaming. When the client disconnects, the piper and ffmpeg processes are killed and awaited, then the slot is freed, so a queued request can start at once. Cancellation is per replica; there is no cross-replica cancellation. Pick a client timeout that allows for synthesis: piper takes about 2 s before the first byte for short inputs, and longer for longer text.\n\n**Performance.** Each request starts a fresh piper process that loads the ONNX voice model (about 61 MB), a fixed cold start of roughly 1.7 to 2 s. The piper CLI has no daemon mode, so this service targets batch and offline narration, not low-latency interactive use. For that, drive piper from Python with a long-lived model.",
         "operationId": "speak",
         "parameters": [
           {
@@ -300,7 +300,7 @@
     },
     "/v1/synthesize": {
       "post": {
-        "description": "Queues a job that generates the MP3 and uploads it to the presigned URL returned by genUploadUrl. Progress goes to statusCallbackUrl. A 202 means queued, not done.",
+        "description": "Queues a job that generates the MP3 and uploads it to a presigned URL. A 202 means queued, not done.\n\n**Callbacks.** Once per attempt the service calls `genUploadUrl` with `{\"jobId\", \"attempt\", \"contentType\": \"audio/mpeg\"}`. It must reply 200 with `{\"uploadUrl\": \"...\"}`, a short-lived presigned PUT URL. Progress goes to `statusCallbackUrl` with an `Idempotency-Key: \u003cjobId\u003e:\u003cattempt\u003e` header.\n\n| Status | Extra fields | Meaning |\n| --- | --- | --- |\n| queued | | A worker received the job. |\n| generating | percent (0-99) | Producing the MP3. |\n| uploading | percent (0-99) | Uploading to object storage. |\n| completed | fileSizeBytes | Upload succeeded. |\n| failed | failedAt, error | Terminal failure, no more retries. |\n\nPercentages are stage-local, approximate and monotonic. Status delivery is best effort: timeouts and non-2xx replies do not stop synthesis. Clients must tolerate duplicate, missing and out-of-order updates.\n\n**Delivery and retries.** RabbitMQ delivery is at least once. A worker crash after the upload and before the acknowledgement can repeat the upload and the callbacks. A retryable failure in generating, getting the upload URL or uploading republishes the job with attempt + 1, up to `SYNTHESIZE_MAX_ATTEMPTS`. The delay is the `Retry-After` of a 429 reply (at most one hour), otherwise `SYNTHESIZE_RETRY_DELAY_MS` times the number of the failed attempt. Delayed retries need RabbitMQ 4.4 or newer; older brokers redeliver at once. A job that fails for good gets the failed callback and its message goes to the dead-letter queue.\n\n**Security.** Callback URLs must be HTTPS in production, and URL credentials and fragments are rejected. `SYNTHESIZE_CALLBACK_ALLOWED_HOSTS` restricts the hosts, and the worker refuses non-public addresses unless the host is listed. Presigned URLs are redacted in logs. The optional `Authorization` header is passed through to the callbacks.\n\n**Operations.** The service declares durable exchanges and quorum queues (`synthesize.work`, `synthesize.dlq`) with prefetch 1; give RabbitMQ persistent storage. See the scaling guide in the repository for KEDA and rollout guidance.",
         "operationId": "synthesize",
         "parameters": [
           {

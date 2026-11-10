@@ -29,7 +29,7 @@ You can configure and setup this image using env variables.
     <tr>
       <td>DOCS_ENABLED</td>
       <td>false</td>
-      <td>Serves Swagger UI at <code>/docs</code> and the OpenAPI document at <code>/openapi.json</code>. Keep it off in production.</td>
+      <td>Serves Swagger UI at <code>/docs</code> and the OpenAPI document at <code>/openapi.json</code> and <code>/openapi.yaml</code>. Keep it off in production.</td>
     </tr>
     <tr>
       <td>APP_ENV</td>
@@ -64,7 +64,12 @@ You can configure and setup this image using env variables.
     <tr>
       <td>MAX_CONCURRENCY</td>
       <td>10</td>
-      <td>Maximum number of simultaneous <code>/speak</code> will handle simultaneously.</td>
+      <td>Maximum number of <code>/v1/speak</code> requests handled at the same time.</td>
+    </tr>
+    <tr>
+      <td>MAX_BODY_SIZE_BYTES</td>
+      <td>500000 (0.5 MB)</td>
+      <td>Max <code>/v1/speak</code> payload.</td>
     </tr>
   </tbody>
 </table>
@@ -83,6 +88,27 @@ The Docker image ships these Piper voices under `/app/models/`:
 - `en_US-kristin-medium.onnx`.
 
 Switch voices via `PIPER_MODEL=/app/models/<voice>.onnx`.
+
+## Minimum resources
+
+Measured with the default voice (`en_US-lessac-medium`), piper-tts 1.8.0, one replica. Treat the numbers as a starting point and measure on your hardware.
+
+| Resource | Minimum                   | Notes                                                                                             |
+| -------- | ------------------------- | ------------------------------------------------------------------------------------------------- |
+| Volume   | 1 GB of image storage     | Image content is about 800 MB: models 500 MB (8 voices, about 63 MB each), piper venv 215 MB, server 18 MB. The service writes no files at runtime, so it needs no persistent volume. |
+| RAM      | 512 MB                    | The idle server uses about 15 MiB. One synthesis pipeline (piper and ffmpeg) peaks at about 300-330 MiB. |
+| CPU      | 1 vCPU, 2 or more advised | One request uses CPU for the whole synthesis and, unconstrained, spreads over several cores.       |
+
+### How usage grows with parallel requests
+
+Every in-flight request runs its own piper and ffmpeg processes.
+
+- **RAM grows linearly.** Measured peaks: 1 request 332 MiB, 2 requests 655 MiB, 4 requests 1.3 GiB, 8 requests 2.6 GiB. Plan for about 330 MiB per concurrent request plus a small base.
+- **CPU is the limit.** A request costs a fixed startup (about 11 CPU seconds here) plus roughly 0.3 CPU seconds per word. With enough cores the requests run side by side; once they exceed the cores, each one only gets slower. Measured wall time for the same 500-word text: 1 request 33 s, 2 requests 60 s, 4 requests 117 s, 8 requests 215 s on 16 shared cores. More concurrency then adds latency, not throughput.
+- **`MAX_CONCURRENCY` is the cap.** It limits `/v1/speak` pipelines in one replica, so the RAM ceiling is about `MAX_CONCURRENCY` x 330 MiB: the default of 10 needs about 3.5 GiB, and 15 about 5 GiB. Requests over the cap wait for a slot.
+- **`/v1/synthesize` adds one pipeline per replica,** because a worker takes one job at a time (`prefetch=1`). Add about 330 MiB on top of the `/v1/speak` ceiling and scale with replicas, see the [scaling guide](./scaling.md).
+
+Set container limits for the worst case: memory for `MAX_CONCURRENCY + 1` pipelines, and CPU for the number of requests you want to run without slowing each other down. A memory limit below that gets the processes OOM-killed and fails the request.
 
 ## OpenTelemetry
 
@@ -176,7 +202,7 @@ Every request and response is logged. For end-to-end tracing across services, en
 <details><summary><code>LOGGING_MODE=PLAIN_TEXT</code> (default)</summary>
 
 ```
-[2026-03-08T00:17:21.123Z]     HttpMiddleware       [piper-tts-rest-api] Incoming POST /v1/speak | {"method":"POST","url":"/v1/speak","headers":{...}}
+[2026-03-08T00:17:21.123Z] info    HttpMiddleware       [piper-tts-rest-api] Incoming POST /v1/speak | {"method":"POST","url":"/v1/speak","headers":{...}}
 ```
 
 </details>
@@ -225,7 +251,7 @@ Alert on sustained queue age/depth, any unexpected DLQ growth, elevated terminal
     <tr>
       <td>SYNTHESIZE_MAX_BODY_SIZE_BYTES</td>
       <td>2000000 (2 MB)</td>
-      <td>Max <code>/synthesize</code> payload.</td>
+      <td>Max <code>/v1/synthesize</code> payload.</td>
     </tr>
     <tr>
       <td>SYNTHESIZE_MAX_ATTEMPTS</td>

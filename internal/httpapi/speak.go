@@ -56,6 +56,15 @@ type speakInput struct {
 
 var errBlankText = huma.Error422UnprocessableEntity("Invalid request body", &huma.ErrorDetail{Message: "expected non-blank string", Location: "body.text"})
 
+// speakDescription is Markdown shown in the API reference.
+const speakDescription = `Streams the MP3 in the response, chunked, without a Content-Length.
+
+Piper writes raw PCM to its stdout and ffmpeg encodes it to MP3 on the fly. The PCM sample rate is read once at startup from the model's ` + "`.onnx.json`" + ` sidecar.
+
+**Concurrency and cancellation.** ` + "`MAX_CONCURRENCY`" + ` (default 10) caps the requests handled at once. A slot is held for the whole request: parsing, synthesis, encoding and streaming. When the client disconnects, the piper and ffmpeg processes are killed and awaited, then the slot is freed, so a queued request can start at once. Cancellation is per replica; there is no cross-replica cancellation. Pick a client timeout that allows for synthesis: piper takes several seconds before the first byte even for short inputs, and longer for longer text.
+
+**Performance.** Each request starts a fresh piper process that loads the ONNX voice model (about 61 MB), a fixed cold start of several seconds of CPU. The piper CLI has no daemon mode, so this service targets batch and offline narration, not low-latency interactive use. For that, drive piper from Python with a long-lived model.`
+
 func registerSpeak(api huma.API, s *speaker) {
 	text := &huma.Schema{Type: typeString, Examples: []any{"Hello from plain text"}}
 	huma.Register(api, huma.Operation{
@@ -63,7 +72,7 @@ func registerSpeak(api huma.API, s *speaker) {
 		Method:           http.MethodPost,
 		Path:             "/v1/speak",
 		Summary:          "Synchronous text to speech",
-		Description:      "Streams the MP3 in the response, chunked, without a Content-Length. Aborting the request frees its concurrency slot.",
+		Description:      speakDescription,
 		Tags:             []string{"Speech"},
 		MaxBodyBytes:     int64(s.maxBody),
 		SkipValidateBody: true,

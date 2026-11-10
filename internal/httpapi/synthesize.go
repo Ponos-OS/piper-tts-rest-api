@@ -40,13 +40,34 @@ type synthesizeOutput struct {
 	}
 }
 
+// synthesizeDescription is Markdown shown in the API reference.
+const synthesizeDescription = `Queues a job that generates the MP3 and uploads it to a presigned URL. A 202 means queued, not done.
+
+**Callbacks.** Once per attempt the service calls ` + "`genUploadUrl`" + ` with ` + "`{\"jobId\", \"attempt\", \"contentType\": \"audio/mpeg\"}`" + `. It must reply 200 with ` + "`{\"uploadUrl\": \"...\"}`" + `, a short-lived presigned PUT URL. Progress goes to ` + "`statusCallbackUrl`" + ` with an ` + "`Idempotency-Key: <jobId>:<attempt>`" + ` header.
+
+| Status | Extra fields | Meaning |
+| --- | --- | --- |
+| queued | | A worker received the job. |
+| generating | percent (0-99) | Producing the MP3. |
+| uploading | percent (0-99) | Uploading to object storage. |
+| completed | fileSizeBytes | Upload succeeded. |
+| failed | failedAt, error | Terminal failure, no more retries. |
+
+Percentages are stage-local, approximate and monotonic. Status delivery is best effort: timeouts and non-2xx replies do not stop synthesis. Clients must tolerate duplicate, missing and out-of-order updates.
+
+**Delivery and retries.** RabbitMQ delivery is at least once. A worker crash after the upload and before the acknowledgement can repeat the upload and the callbacks. A failure while generating, getting the upload URL or uploading is retried when it is not an HTTP answer (a network error, for example), or the answer is 408, 429 or 5xx. Other 4xx answers and redirects fail the job at once. A retry republishes the job with attempt + 1, up to ` + "`SYNTHESIZE_MAX_ATTEMPTS`" + `. The delay is the ` + "`Retry-After`" + ` of a 429 reply (at most one hour), otherwise ` + "`SYNTHESIZE_RETRY_DELAY_MS`" + ` times the number of the failed attempt. Delayed retries need RabbitMQ 4.4 or newer; older brokers redeliver at once. A job that fails for good gets the failed callback and its message goes to the dead-letter queue.
+
+**Security.** Callback URLs must be HTTPS in production, and URL credentials and fragments are rejected. ` + "`SYNTHESIZE_CALLBACK_ALLOWED_HOSTS`" + ` restricts the hosts, and the worker refuses non-public addresses unless the host is listed. Presigned URLs are redacted in logs. The optional ` + "`Authorization`" + ` header is passed through to the callbacks.
+
+**Operations.** The service declares durable exchanges and quorum queues (` + "`synthesize.work`" + `, ` + "`synthesize.dlq`" + `) with prefetch 1; give RabbitMQ persistent storage. See the scaling guide in the repository for KEDA and rollout guidance.`
+
 func registerSynthesize(api huma.API, s *synthesizer) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "synthesize",
 		Method:        http.MethodPost,
 		Path:          "/v1/synthesize",
 		Summary:       "Asynchronous text to speech",
-		Description:   "Queues a job that generates the MP3 and uploads it to the presigned URL returned by genUploadUrl. Progress goes to statusCallbackUrl. A 202 means queued, not done.",
+		Description:   synthesizeDescription,
 		Tags:          []string{"Speech"},
 		DefaultStatus: http.StatusAccepted,
 		MaxBodyBytes:  int64(s.maxBody),

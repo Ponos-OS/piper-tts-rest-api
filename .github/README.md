@@ -4,6 +4,6 @@ Dockerized Go RESTful API for offline text-to-speech using Piper TTS. Supports b
 
 🐳📦🚢 [The image in Docker Hub](https://hub.docker.com/r/9109679196/piper-tts-rest-api).
 
-- You can find [API docs here](./docs/APIs.md).
+- [API reference](https://kasir-barati.github.io/piper-tts-rest-api/latest/) (versioned OpenAPI docs).
 - As for env variables and how to start it read [this docs](./docs/config.md).
 - See [scaling](./docs/scaling.md) for deployment and KEDA guidance.

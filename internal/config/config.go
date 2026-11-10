@@ -30,7 +30,7 @@ const (
 	LogLevelDebug   = "debug"
 )
 
-// Defaults match the documented values in docs/config.md.
+// Defaults match the documented values in .github/docs/config.md.
 const (
 	defaultPort                = 3000
 	defaultMaxConcurrency      = 10
