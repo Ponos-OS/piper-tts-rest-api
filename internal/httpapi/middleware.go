@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/kasir-barati/piper-tts-rest-api/internal/health"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
 )
 
@@ -19,16 +20,13 @@ const (
 	keyAborted    = "aborted"
 )
 
-// healthPath is not logged: it is polled by health checks.
-const healthPath = "/health"
-
 // requestLogging logs every request when it arrives and again when it completes.
 func requestLogging(logger *slog.Logger) func(http.Handler) http.Handler {
 	log := logging.Named(logger, "HttpMiddleware")
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == healthPath {
+			if r.URL.Path == health.Path {
 				next.ServeHTTP(w, r)
 
 				return

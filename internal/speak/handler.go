@@ -1,4 +1,5 @@
-package httpapi
+// Package speak serves POST /v1/speak, which streams an MP3.
+package speak
 
 import (
 	"bytes"
@@ -17,12 +18,13 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/piper"
 )
 
 const (
-	keyError = "error"
-	keyJobID = "jobId"
+	keyError   = "error"
+	typeString = "string"
 
 	chunkSize = 32 * 1024
 
@@ -42,7 +44,8 @@ type speakRequest struct {
 	Text string `json:"text" doc:"The text to speak." example:"Hello from Piper API" pattern:"\\S"`
 }
 
-type speaker struct {
+// Handler serves /v1/speak.
+type Handler struct {
 	synth   *piper.Synthesizer
 	slots   semaphore
 	maxBody int
@@ -65,7 +68,18 @@ Piper writes raw PCM to its stdout and ffmpeg encodes it to MP3 on the fly. The 
 
 **Performance.** Each request starts a fresh piper process that loads the ONNX voice model (about 61 MB), a fixed cold start of several seconds of CPU. The piper CLI has no daemon mode, so this service targets batch and offline narration, not low-latency interactive use. For that, drive piper from Python with a long-lived model.`
 
-func registerSpeak(api huma.API, s *speaker) {
+// New returns a Handler allowing maxConcurrency requests at once.
+func New(synth *piper.Synthesizer, maxConcurrency, maxBody int, logger *slog.Logger) *Handler {
+	return &Handler{
+		synth:   synth,
+		slots:   newSemaphore(maxConcurrency),
+		maxBody: maxBody,
+		log:     logging.Named(logger, "Speak"),
+	}
+}
+
+// RegisterRoutes mounts the endpoint on api.
+func (s *Handler) RegisterRoutes(api huma.API) {
 	text := &huma.Schema{Type: typeString, Examples: []any{"Hello from plain text"}}
 	huma.Register(api, huma.Operation{
 		OperationID:      "speak",
@@ -101,9 +115,8 @@ func registerSpeak(api huma.API, s *speaker) {
 	delete(api.OpenAPI().Paths["/v1/speak"].Post.RequestBody.Content, "application/octet-stream")
 }
 
-// handleSpeak holds a concurrency slot for the whole request, so MAX_CONCURRENCY caps running pipelines end to end.
-// A client that disconnects cancels the request context, which kills piper and ffmpeg.
-func (s *speaker) handleSpeak(ctx context.Context, in *speakInput) (*huma.StreamResponse, error) {
+// handleSpeak holds a concurrency slot for the whole request, so MAX_CONCURRENCY caps running pipelines end to end. A client that disconnects cancels the request context, which kills piper and ffmpeg.
+func (s *Handler) handleSpeak(ctx context.Context, in *speakInput) (*huma.StreamResponse, error) {
 	text, err := speakText(in)
 	if err != nil {
 		return nil, err
@@ -162,7 +175,7 @@ func speakText(in *speakInput) (string, error) {
 }
 
 // stream sends the MP3 to the client. After the first chunk a failure aborts the connection, so the client sees a truncated response instead of a complete-looking one.
-func (s *speaker) stream(ctx context.Context, hctx huma.Context, stream io.Reader) {
+func (s *Handler) stream(ctx context.Context, hctx huma.Context, stream io.Reader) {
 	started, err := copyAudio(hctx, stream)
 	if err == nil || ctx.Err() != nil || errors.Is(err, errClientGone) {
 		return // done, or the client left and the deferred Close already killed the processes.

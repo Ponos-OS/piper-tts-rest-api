@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -13,14 +12,15 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
-	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
+	"github.com/kasir-barati/piper-tts-rest-api/internal/health"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/piper"
+	"github.com/kasir-barati/piper-tts-rest-api/internal/speak"
+	"github.com/kasir-barati/piper-tts-rest-api/internal/synthesis"
 )
 
 const (
 	apiTitle    = "Piper TTS REST API"
 	docsPath    = "/docs"
-	typeString  = "string"
 	openAPIPath = "/openapi"
 )
 
@@ -28,7 +28,7 @@ const (
 type Options struct {
 	Logger           *slog.Logger
 	Synthesizer      *piper.Synthesizer
-	Jobs             JobPublisher
+	Jobs             synthesis.JobPublisher
 	MaxConcurrency   int
 	MaxBodySizeBytes int
 	Synthesize       SynthesizeOptions
@@ -51,7 +51,7 @@ func NewRouter(opts Options) http.Handler {
 	// Tracing wraps the logging, so the request log lines carry the trace id.
 	r.Use(
 		otelhttp.NewMiddleware("http",
-			otelhttp.WithFilter(func(r *http.Request) bool { return r.URL.Path != healthPath }),
+			otelhttp.WithFilter(func(r *http.Request) bool { return r.URL.Path != health.Path }),
 			otelhttp.WithSpanNameFormatter(spanName),
 		),
 		requestLogging(opts.Logger),
@@ -96,42 +96,9 @@ func newAPI(r chi.Router, opts Options) huma.API {
 }
 
 func registerOperations(api huma.API, opts Options) {
-	registerHealth(api)
-	registerSpeak(api, &speaker{
-		synth:   opts.Synthesizer,
-		slots:   newSemaphore(opts.MaxConcurrency),
-		maxBody: opts.MaxBodySizeBytes,
-		log:     logging.Named(opts.Logger, "Speak"),
-	})
-	registerSynthesize(api, &synthesizer{
-		jobs:     opts.Jobs,
-		maxBody:  opts.Synthesize.MaxBodySizeBytes,
-		callback: opts.Synthesize.Callback,
-		log:      logging.Named(opts.Logger, "Synthesize"),
-	})
-}
-
-type healthOutput struct {
-	ContentType string `header:"Content-Type"`
-	Body        []byte
-}
-
-func registerHealth(api huma.API) {
-	huma.Register(api, huma.Operation{
-		OperationID: "health",
-		Method:      http.MethodGet,
-		Path:        healthPath,
-		Summary:     "Health check",
-		Tags:        []string{"Health"},
-		Responses: map[string]*huma.Response{
-			"200": {
-				Description: "The service is up.",
-				Content:     map[string]*huma.MediaType{"text/plain": {Schema: &huma.Schema{Type: typeString, Examples: []any{"OK"}}}},
-			},
-		},
-	}, func(_ context.Context, _ *struct{}) (*healthOutput, error) {
-		return &healthOutput{ContentType: "text/plain; charset=utf-8", Body: []byte("OK")}, nil
-	})
+	huma.AutoRegister(api, health.Handler{})
+	huma.AutoRegister(api, speak.New(opts.Synthesizer, opts.MaxConcurrency, opts.MaxBodySizeBytes, opts.Logger))
+	huma.AutoRegister(api, synthesis.New(opts.Jobs, opts.Synthesize.MaxBodySizeBytes, opts.Synthesize.Callback, opts.Logger))
 }
 
 // spanName is "POST /speak": the method and the matched route, so spans are not named per URL.

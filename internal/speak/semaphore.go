@@ -1,4 +1,4 @@
-package httpapi
+package speak
 
 import "context" // Standard way to carry cancellation signals, deadlines, and request-scoped values across function calls.
 

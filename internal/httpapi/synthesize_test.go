@@ -39,7 +39,7 @@ func (f *fakePublisher) PublishJob(ctx context.Context, job synthesis.Job, autho
 	return f.err
 }
 
-func newSynthesizeRouter(jobs httpapi.JobPublisher, callback config.Callback, maxBody int) http.Handler {
+func newSynthesizeRouter(jobs synthesis.JobPublisher, callback config.Callback, maxBody int) http.Handler {
 	logger := logging.New(config.Log{Mode: config.LogModeJSON, Level: config.LogLevelError}, "svc", io.Discard)
 
 	return httpapi.NewRouter(httpapi.Options{

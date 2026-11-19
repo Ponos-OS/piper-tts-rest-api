@@ -1,4 +1,4 @@
-package httpapi
+package speak
 
 import (
 	"context"

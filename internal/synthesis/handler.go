@@ -1,4 +1,4 @@
-package httpapi
+package synthesis
 
 import (
 	"context"
@@ -11,18 +11,24 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kasir-barati/piper-tts-rest-api/internal/config"
-	"github.com/kasir-barati/piper-tts-rest-api/internal/synthesis"
+	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
 )
 
 // publishTimeout bounds waiting for the broker to confirm a job.
+const (
+	keyError = "error"
+	keyJobID = "jobId"
+)
+
 const publishTimeout = 10 * time.Second
 
 // JobPublisher enqueues a synthesize job and returns once the broker confirmed it.
 type JobPublisher interface {
-	PublishJob(ctx context.Context, job synthesis.Job, authorization string) error
+	PublishJob(ctx context.Context, job Job, authorization string) error
 }
 
-type synthesizer struct {
+// Handler serves /v1/synthesize.
+type Handler struct {
 	jobs     JobPublisher
 	maxBody  int
 	callback config.Callback
@@ -31,7 +37,7 @@ type synthesizer struct {
 
 type synthesizeInput struct {
 	Authorization string `header:"Authorization" doc:"Passed through to the callbacks. Optional."`
-	Body          synthesis.Request
+	Body          Request
 }
 
 type synthesizeOutput struct {
@@ -53,7 +59,7 @@ const synthesizeDescription = `Queues a job that generates the MP3 and uploads i
 | completed | fileSizeBytes | Upload succeeded. |
 | failed | failedAt, error | Terminal failure, no more retries. |
 
-Percentages are stage-local, approximate and monotonic. Status delivery is best effort: timeouts and non-2xx replies do not stop synthesis. Clients must tolerate duplicate, missing and out-of-order updates.
+Percentages are stage-local, approximate and monotonic. Status delivery is best effort: timeouts and non-2xx replies do not stop  Clients must tolerate duplicate, missing and out-of-order updates.
 
 **Delivery and retries.** RabbitMQ delivery is at least once. A worker crash after the upload and before the acknowledgement can repeat the upload and the callbacks. A failure while generating, getting the upload URL or uploading is retried when it is not an HTTP answer (a network error, for example), or the answer is 408, 429 or 5xx. Other 4xx answers and redirects fail the job at once. A retry republishes the job with attempt + 1, up to ` + "`SYNTHESIZE_MAX_ATTEMPTS`" + `. The delay is the ` + "`Retry-After`" + ` of a 429 reply (at most one hour), otherwise ` + "`SYNTHESIZE_RETRY_DELAY_MS`" + ` times the number of the failed attempt. Delayed retries need RabbitMQ 4.4 or newer; older brokers redeliver at once. A job that fails for good gets the failed callback and its message goes to the dead-letter queue.
 
@@ -61,7 +67,18 @@ Percentages are stage-local, approximate and monotonic. Status delivery is best 
 
 **Operations.** The service declares durable exchanges and quorum queues (` + "`synthesize.work`" + `, ` + "`synthesize.dlq`" + `) with prefetch 1; give RabbitMQ persistent storage. See the scaling guide in the repository for KEDA and rollout guidance.`
 
-func registerSynthesize(api huma.API, s *synthesizer) {
+// New returns a Handler publishing jobs to jobs.
+func New(jobs JobPublisher, maxBody int, callback config.Callback, logger *slog.Logger) *Handler {
+	return &Handler{
+		jobs:     jobs,
+		maxBody:  maxBody,
+		callback: callback,
+		log:      logging.Named(logger, "Synthesize"),
+	}
+}
+
+// RegisterRoutes mounts the endpoint on api.
+func (s *Handler) RegisterRoutes(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "synthesize",
 		Method:        http.MethodPost,
@@ -76,13 +93,13 @@ func registerSynthesize(api huma.API, s *synthesizer) {
 }
 
 // handleSynthesize validates the request and queues a job; the 202 means "queued", not "done".
-func (s *synthesizer) handleSynthesize(ctx context.Context, in *synthesizeInput) (*synthesizeOutput, error) {
+func (s *Handler) handleSynthesize(ctx context.Context, in *synthesizeInput) (*synthesizeOutput, error) {
 	req, err := in.Body.Normalize(s.callback)
 	if err != nil {
 		return nil, s.normalizeError(ctx, err)
 	}
 
-	job := synthesis.Job{ID: uuid.NewString(), Request: req}
+	job := Job{ID: uuid.NewString(), Request: req}
 	ctx, cancel := context.WithTimeout(ctx, publishTimeout)
 	defer cancel()
 
@@ -99,8 +116,8 @@ func (s *synthesizer) handleSynthesize(ctx context.Context, in *synthesizeInput)
 }
 
 // normalizeError answers 422 for any Normalize failure, so an unexpected error can never lead to a published job.
-func (s *synthesizer) normalizeError(ctx context.Context, err error) error {
-	var invalid *synthesis.ValidationError
+func (s *Handler) normalizeError(ctx context.Context, err error) error {
+	var invalid *ValidationError
 	if !errors.As(err, &invalid) {
 		s.log.ErrorContext(ctx, "Normalizing the request failed", slog.Any(keyError, err))
 

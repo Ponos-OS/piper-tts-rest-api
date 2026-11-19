@@ -19,6 +19,7 @@ import (
 	"github.com/kasir-barati/piper-tts-rest-api/internal/httpapi"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/logging"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/piper"
+	"github.com/kasir-barati/piper-tts-rest-api/internal/synthesis"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/telemetry"
 	"github.com/kasir-barati/piper-tts-rest-api/internal/worker"
 )
@@ -101,7 +102,7 @@ func run() error {
 	)
 }
 
-func routerOptions(cfg config.Config, logger *slog.Logger, synth *piper.Synthesizer, jobs httpapi.JobPublisher) httpapi.Options {
+func routerOptions(cfg config.Config, logger *slog.Logger, synth *piper.Synthesizer, jobs synthesis.JobPublisher) httpapi.Options {
 	return httpapi.Options{
 		Logger:           logger,
 		Synthesizer:      synth,
