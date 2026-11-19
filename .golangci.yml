@@ -79,6 +79,8 @@ linters:
             - github.com/google/uuid
             - github.com/rabbitmq/amqp091-go
             - go.opentelemetry.io
+            - go.uber.org/fx
+            - github.com/joho/godotenv
         test:
           list-mode: original
           files: ["$test"]

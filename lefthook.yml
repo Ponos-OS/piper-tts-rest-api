@@ -1,11 +1,11 @@
 pre-commit:
   jobs:
     - name: lint
-      run: make lint_check
+      run: task lint:check
 
 pre-push:
   jobs:
     - name: unit tests
-      run: make test
+      run: task test
     - name: integration tests
-      run: make integration_test
+      run: task test:integration

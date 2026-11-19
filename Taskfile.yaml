@@ -1,0 +1,37 @@
+version: "3"
+
+tasks:
+  init:
+    desc: Initializes the project (downloads dependencies, installs git hooks, creates .env)
+    cmds:
+      - go mod download
+      - go mod download -modfile=tools/go.mod
+      - go tool -modfile=tools/go.mod lefthook install
+      - cmd: cp --update=none .env.example .env
+        ignore_error: true
+  start:dev:
+    desc: Start the app in dev mode
+    cmd: go run ./cmd/server
+  build:
+    desc: Builds the server binary into bin/
+    cmd: go build -o bin/server ./cmd/server
+  schema:
+    desc: Writes the OpenAPI document to docs/openapi.json
+    cmds:
+      - mkdir -p docs
+      - go run ./cmd/openapi > docs/openapi.json
+  test:
+    desc: Runs unit tests
+    cmd: go test ./...
+  test:integration:
+    desc: Runs integration tests (need Docker)
+    cmd: go test -tags integration -p 1 ./...
+  lint:check:
+    desc: Check formatting and lint without changing files
+    cmd: go tool -modfile=tools/go.mod golangci-lint run
+  lint:
+    desc: Apply lint fixes and formatting
+    cmd: go tool -modfile=tools/go.mod golangci-lint run --fix
+  clean:
+    desc: Removes build artefacts
+    cmd: rm -rf bin

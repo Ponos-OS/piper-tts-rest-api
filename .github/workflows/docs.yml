@@ -2,7 +2,7 @@ name: Publish API docs
 
 # Triggered after the Release workflow succeeds on main.
 # 1. Reads the tag semantic-release just created.
-# 2. Regenerates docs/openapi.json via `make schema`.
+# 2. Regenerates docs/openapi.json via `task schema`.
 # 3. Renders it into a static Redoc site.
 # 4. Commits it back to main under docs/v<version>/ + docs/latest/.
 
@@ -53,10 +53,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Setup Task
+        uses: go-task/setup-task@v2.2.0
+
       - name: Regenerate docs/openapi.json from the released code
         env:
           VERSION_TAG: ${{ steps.version.outputs.tag }}
-        run: SERVICE_VERSION="${VERSION_TAG#v}" make schema
+        run: SERVICE_VERSION="${VERSION_TAG#v}" task schema
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

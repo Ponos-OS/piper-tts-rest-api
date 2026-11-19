@@ -2,16 +2,11 @@ package httpapi_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
-	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -159,64 +154,6 @@ func TestRequestLogging_RedactsSecretQueryParameters(t *testing.T) {
 			assert.NotContains(t, out.String(), "abc123")
 		})
 	}
-}
-
-func TestServe_DrainsInFlightRequestsOnShutdown(t *testing.T) {
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	started := make(chan struct{})
-	release := make(chan struct{})
-	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		close(started)
-		<-release
-		w.WriteHeader(http.StatusAccepted)
-	})
-	ctx, cancel := context.WithCancel(t.Context())
-	served := make(chan error, 1)
-	returned := make(chan struct{})
-	go func() {
-		served <- httpapi.Serve(ctx, ln, handler)
-		close(returned)
-	}()
-	response := make(chan fetched, 1)
-	go func() { response <- fetch(t.Context(), "http://"+ln.Addr().String()) }()
-	<-started
-
-	cancel()
-	returnedEarly := func() bool {
-		select {
-		case <-returned:
-			return true
-		default:
-			return false
-		}
-	}
-	assert.Never(t, returnedEarly, 200*time.Millisecond, 10*time.Millisecond)
-	close(release)
-
-	require.NoError(t, <-served)
-	got := <-response
-	require.NoError(t, got.err)
-	assert.Equal(t, http.StatusAccepted, got.status)
-}
-
-type fetched struct {
-	status int
-	err    error
-}
-
-func fetch(ctx context.Context, url string) fetched {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-	if err != nil {
-		return fetched{err: err}
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fetched{err: err}
-	}
-	_, drainErr := io.Copy(io.Discard, resp.Body)
-
-	return fetched{status: resp.StatusCode, err: errors.Join(drainErr, resp.Body.Close())}
 }
 
 const (

@@ -2,6 +2,7 @@ package piper_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,7 +21,7 @@ type fakes struct {
 	ffmpeg string
 }
 
-// install puts the fake binaries first on PATH and returns the evidence directory.
+// install makes the fake binaries, plus the cat and sleep they call, the only ones on PATH, so a piper or ffmpeg installed on the machine never leaks into a test and returns the evidence directory.
 func install(t *testing.T, f fakes) string {
 	t.Helper()
 	binDir := t.TempDir()
@@ -32,7 +33,12 @@ func install(t *testing.T, f fakes) string {
 	if f.ffmpeg != "" {
 		writeScript(t, filepath.Join(binDir, "ffmpeg"), "case \"$1\" in -version) exit 0;; esac\n"+f.ffmpeg)
 	}
-	t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
+	for _, tool := range []string{"cat", "sleep"} {
+		path, err := exec.LookPath(tool)
+		require.NoError(t, err)
+		require.NoError(t, os.Symlink(path, filepath.Join(binDir, tool)))
+	}
+	t.Setenv("PATH", binDir)
 	t.Setenv("EVIDENCE", evidence)
 
 	return evidence
