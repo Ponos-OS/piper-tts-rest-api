@@ -93,11 +93,11 @@ Switch voices via `PIPER_MODEL=/app/models/<voice>.onnx`.
 
 Measured with the default voice (`en_US-lessac-medium`), piper-tts 1.8.0, one replica. Treat the numbers as a starting point and measure on your hardware.
 
-| Resource | Minimum                   | Notes                                                                                             |
-| -------- | ------------------------- | ------------------------------------------------------------------------------------------------- |
+| Resource | Minimum                   | Notes                                                                                                                                                                                 |
+| -------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Volume   | 1 GB of image storage     | Image content is about 800 MB: models 500 MB (8 voices, about 63 MB each), piper venv 215 MB, server 18 MB. The service writes no files at runtime, so it needs no persistent volume. |
-| RAM      | 512 MB                    | The idle server uses about 15 MiB. One synthesis pipeline (piper and ffmpeg) peaks at about 300-330 MiB. |
-| CPU      | 1 vCPU, 2 or more advised | One request uses CPU for the whole synthesis and, unconstrained, spreads over several cores.       |
+| RAM      | 512 MB                    | The idle server uses about 15 MiB. One synthesis pipeline (piper and ffmpeg) peaks at about 300-330 MiB.                                                                              |
+| CPU      | 1 vCPU, 2 or more advised | One request uses CPU for the whole synthesis and, unconstrained, spreads over several cores.                                                                                          |
 
 ### How usage grows with parallel requests
 
@@ -139,55 +139,35 @@ Set container limits for the worst case: memory for `MAX_CONCURRENCY + 1` pipeli
     <tr>
       <td>OTEL_TRACES_SAMPLER</td>
       <td>parentbased_traceidratio</td>
-      <td>Standard OTel sampler.</td>
+      <td>Standard OTel sampler, read by the SDK.</td>
     </tr>
     <tr>
       <td>OTEL_TRACES_SAMPLER_ARG</td>
       <td>1.0</td>
-      <td>Ratio (0‑1) for ratio samplers.</td>
-    </tr>
-    <tr>
-      <td>OTEL_BATCH_MAX_PENDING_SPANS</td>
-      <td>2048</td>
-      <td>Max queued spans before dropping.</td>
-    </tr>
-    <tr>
-      <td>OTEL_BATCH_SPANS_PER_EXPORT</td>
-      <td>512</td>
-      <td>Batch size per export.</td>
-    </tr>
-    <tr>
-      <td>OTEL_BATCH_FLUSH_INTERVAL_MS</td>
-      <td>5000</td>
-      <td>Flush interval.</td>
-    </tr>
-    <tr>
-      <td>OTEL_BATCH_EXPORT_TIMEOUT_MS</td>
-      <td>30000</td>
-      <td>Export deadline.</td>
-    </tr>
-    <tr>
-      <td>OTEL_LOGS_BATCH_MAX_PENDING</td>
-      <td>2048</td>
-      <td>Max queued log records before dropping.</td>
-    </tr>
-    <tr>
-      <td>OTEL_LOGS_BATCH_PER_EXPORT</td>
-      <td>512</td>
-      <td>Log records per export.</td>
-    </tr>
-    <tr>
-      <td>OTEL_LOGS_BATCH_FLUSH_INTERVAL_MS</td>
-      <td>5000</td>
-      <td>Log flush interval.</td>
-    </tr>
-    <tr>
-      <td>OTEL_LOGS_BATCH_EXPORT_TIMEOUT_MS</td>
-      <td>30000</td>
-      <td>Log export deadline.</td>
+      <td>Ratio (0‑1) for ratio samplers, read by the SDK.</td>
     </tr>
   </tbody>
 </table>
+
+Only `OTEL_ENABLED` and `OTEL_LOG_SHIPPING` are specific to this service. Everything else in the table is a standard OpenTelemetry variable that the SDK reads itself, so any other standard `OTEL_*` variable works as well, with no extra code. Notable ones:
+
+| Variable                          | Default | Tunes                                            |
+| --------------------------------- | ------- | ------------------------------------------------ |
+| `OTEL_BSP_MAX_QUEUE_SIZE`         | 2048    | Spans queued before dropping                     |
+| `OTEL_BSP_MAX_EXPORT_BATCH_SIZE`  | 512     | Spans per export                                 |
+| `OTEL_BSP_SCHEDULE_DELAY`         | 5000    | Span flush interval (ms)                         |
+| `OTEL_BSP_EXPORT_TIMEOUT`         | 30000   | Span export deadline (ms)                        |
+| `OTEL_BLRP_MAX_QUEUE_SIZE`        | 2048    | Log records queued before dropping               |
+| `OTEL_BLRP_MAX_EXPORT_BATCH_SIZE` | 512     | Log records per export                           |
+| `OTEL_BLRP_SCHEDULE_DELAY`        | 1000    | Log flush interval (ms)                          |
+| `OTEL_BLRP_EXPORT_TIMEOUT`        | 30000   | Log export deadline (ms)                         |
+| `OTEL_EXPORTER_OTLP_HEADERS`      | (none)  | Headers on every export, e.g. an auth token      |
+| `OTEL_EXPORTER_OTLP_TIMEOUT`      | 10000   | Per-request timeout (ms)                         |
+| `OTEL_RESOURCE_ATTRIBUTES`        | (none)  | Extra resource attributes, `key=value,key=value` |
+
+`OTEL_BSP_*` apply to traces and `OTEL_BLRP_*` to logs. Signal-specific variants such as `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` and `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` override the shared ones. See the [OpenTelemetry SDK environment variable specification](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/) for the full list.
+
+The former `OTEL_BATCH_*` and `OTEL_LOGS_BATCH_*` variables were removed: use the `OTEL_BSP_*` and `OTEL_BLRP_*` equivalents above. They are no longer read, so an old value is silently ignored.
 
 In production point `OTEL_EXPORTER_OTLP_ENDPOINT` to your own collector and set `OTEL_ENABLED=true`.
 

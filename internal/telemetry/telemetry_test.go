@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,6 +43,8 @@ func newCollector(t *testing.T) *collector {
 	}))
 	t.Cleanup(srv.Close)
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", srv.URL)
+	t.Setenv("OTEL_BSP_SCHEDULE_DELAY", "3600000")
+	t.Setenv("OTEL_BLRP_SCHEDULE_DELAY", "3600000")
 
 	return c
 }
@@ -56,11 +57,9 @@ func (c *collector) received(path string) []byte {
 }
 
 func testConfig(enabled bool, logShipping string) config.Config {
-	batch := config.Batch{MaxQueueSize: 10, MaxExportBatchSize: 10, FlushInterval: time.Hour, ExportTimeout: 5 * time.Second}
-
 	return config.Config{
 		Service: config.Service{Name: serviceName, Version: "9.8.7", Env: "test"},
-		Otel:    config.Otel{Enabled: enabled, LogShipping: logShipping, Traces: batch, Logs: batch},
+		Otel:    config.Otel{Enabled: enabled, LogShipping: logShipping},
 	}
 }
 

@@ -48,8 +48,6 @@ func TestLoad_Defaults(t *testing.T) {
 		Log: config.Log{Mode: "PLAIN_TEXT", Level: "info"},
 		Otel: config.Otel{
 			LogShipping: "otlp",
-			Traces:      config.Batch{MaxQueueSize: 2048, MaxExportBatchSize: 512, FlushInterval: 5 * time.Second, ExportTimeout: 30 * time.Second},
-			Logs:        config.Batch{MaxQueueSize: 2048, MaxExportBatchSize: 512, FlushInterval: 5 * time.Second, ExportTimeout: 30 * time.Second},
 		},
 	}, cfg)
 }
@@ -84,14 +82,6 @@ func TestLoad_ReadsEveryVariable(t *testing.T) {
 		"OTEL_ENABLED":                          "true",
 		"OTEL_EXPORTER_OTLP_ENDPOINT":           "http://collector:4318",
 		"OTEL_LOG_SHIPPING":                     "stdout",
-		"OTEL_BATCH_MAX_PENDING_SPANS":          "1",
-		"OTEL_BATCH_SPANS_PER_EXPORT":           "2",
-		"OTEL_BATCH_FLUSH_INTERVAL_MS":          "3",
-		"OTEL_BATCH_EXPORT_TIMEOUT_MS":          "4",
-		"OTEL_LOGS_BATCH_MAX_PENDING":           "5",
-		"OTEL_LOGS_BATCH_PER_EXPORT":            "6",
-		"OTEL_LOGS_BATCH_FLUSH_INTERVAL_MS":     "7",
-		"OTEL_LOGS_BATCH_EXPORT_TIMEOUT_MS":     "8",
 	}
 
 	cfg, err := config.Load(lookupFrom(env))
@@ -125,8 +115,6 @@ func TestLoad_ReadsEveryVariable(t *testing.T) {
 			Enabled:          true,
 			ExporterEndpoint: "http://collector:4318",
 			LogShipping:      "stdout",
-			Traces:           config.Batch{MaxQueueSize: 1, MaxExportBatchSize: 2, FlushInterval: 3 * time.Millisecond, ExportTimeout: 4 * time.Millisecond},
-			Logs:             config.Batch{MaxQueueSize: 5, MaxExportBatchSize: 6, FlushInterval: 7 * time.Millisecond, ExportTimeout: 8 * time.Millisecond},
 		},
 	}, cfg)
 }
@@ -189,10 +177,6 @@ func TestLoad_RejectsNonPositiveIntegers(t *testing.T) {
 		"SYNTHESIZE_MAX_BODY_SIZE_BYTES", "SYNTHESIZE_MAX_ATTEMPTS", "SYNTHESIZE_RETRY_DELAY_MS",
 		"SYNTHESIZE_STATUS_CALLBACK_TIMEOUT_MS", "SYNTHESIZE_GEN_UPLOAD_URL_TIMEOUT_MS",
 		"SYNTHESIZE_UPLOAD_IDLE_TIMEOUT_MS", "SYNTHESIZE_UPLOAD_TIMEOUT_MS", "SYNTHESIZE_WORDS_PER_MINUTE",
-		"OTEL_BATCH_MAX_PENDING_SPANS", "OTEL_BATCH_SPANS_PER_EXPORT",
-		"OTEL_BATCH_FLUSH_INTERVAL_MS", "OTEL_BATCH_EXPORT_TIMEOUT_MS",
-		"OTEL_LOGS_BATCH_MAX_PENDING", "OTEL_LOGS_BATCH_PER_EXPORT",
-		"OTEL_LOGS_BATCH_FLUSH_INTERVAL_MS", "OTEL_LOGS_BATCH_EXPORT_TIMEOUT_MS",
 	}
 	values := []string{"0", "-1", "ten", "1.5", "+5", "", "99999999999"}
 

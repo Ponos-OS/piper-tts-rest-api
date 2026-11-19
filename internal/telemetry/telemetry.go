@@ -35,7 +35,7 @@ type Telemetry struct {
 }
 
 // Setup starts tracing and, when OTEL_LOG_SHIPPING=otlp, log shipping; with OTEL_ENABLED off it does nothing.
-// The OTLP endpoint, the sampler and the resource attributes are read from the standard OTEL_* variables by the SDK itself.
+// The OTLP endpoint, the sampler, the resource attributes and the batch tuning (OTEL_BSP_*, OTEL_BLRP_*) are read from the standard OTEL_* variables by the SDK itself.
 func Setup(ctx context.Context, cfg config.Config) (*Telemetry, error) {
 	if !cfg.Otel.Enabled {
 		return &Telemetry{}, nil
@@ -54,11 +54,11 @@ func Setup(ctx context.Context, cfg config.Config) (*Telemetry, error) {
 	}
 
 	t := &Telemetry{}
-	if err = t.startTraces(ctx, res, cfg.Otel.Traces); err != nil {
+	if err = t.startTraces(ctx, res); err != nil {
 		return nil, err
 	}
 	if cfg.Otel.LogShipping == logShippingOTLP {
-		if err = t.startLogs(ctx, res, cfg.Service.Name, cfg.Otel.Logs); err != nil {
+		if err = t.startLogs(ctx, res, cfg.Service.Name); err != nil {
 			return nil, errors.Join(err, t.Shutdown(ctx))
 		}
 	}
@@ -66,7 +66,7 @@ func Setup(ctx context.Context, cfg config.Config) (*Telemetry, error) {
 	return t, nil
 }
 
-func (t *Telemetry) startTraces(ctx context.Context, res *resource.Resource, batch config.Batch) error {
+func (t *Telemetry) startTraces(ctx context.Context, res *resource.Resource) error {
 	exporter, err := otlptracehttp.New(ctx)
 	if err != nil {
 		return fmt.Errorf("create trace exporter: %w", err)
@@ -74,12 +74,7 @@ func (t *Telemetry) startTraces(ctx context.Context, res *resource.Resource, bat
 
 	t.traces = sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
-		sdktrace.WithBatcher(redactingExporter{exporter},
-			sdktrace.WithMaxQueueSize(batch.MaxQueueSize),
-			sdktrace.WithMaxExportBatchSize(batch.MaxExportBatchSize),
-			sdktrace.WithBatchTimeout(batch.FlushInterval),
-			sdktrace.WithExportTimeout(batch.ExportTimeout),
-		),
+		sdktrace.WithBatcher(redactingExporter{exporter}),
 	)
 	otel.SetTracerProvider(t.traces)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
@@ -87,7 +82,7 @@ func (t *Telemetry) startTraces(ctx context.Context, res *resource.Resource, bat
 	return nil
 }
 
-func (t *Telemetry) startLogs(ctx context.Context, res *resource.Resource, service string, batch config.Batch) error {
+func (t *Telemetry) startLogs(ctx context.Context, res *resource.Resource, service string) error {
 	exporter, err := otlploghttp.New(ctx)
 	if err != nil {
 		return fmt.Errorf("create log exporter: %w", err)
@@ -95,12 +90,7 @@ func (t *Telemetry) startLogs(ctx context.Context, res *resource.Resource, servi
 
 	t.logs = sdklog.NewLoggerProvider(
 		sdklog.WithResource(res),
-		sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter,
-			sdklog.WithMaxQueueSize(batch.MaxQueueSize),
-			sdklog.WithExportMaxBatchSize(batch.MaxExportBatchSize),
-			sdklog.WithExportInterval(batch.FlushInterval),
-			sdklog.WithExportTimeout(batch.ExportTimeout),
-		)),
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)),
 	)
 	t.logger = otelslog.NewHandler(service, otelslog.WithLoggerProvider(t.logs))
 

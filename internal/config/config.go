@@ -42,10 +42,6 @@ const (
 	defaultCallbackTimeout     = 10 * time.Second
 	defaultUploadIdleTimeout   = 10 * time.Second
 	defaultUploadTimeout       = 10 * time.Minute
-	defaultBatchQueueSize      = 2048
-	defaultBatchSize           = 512
-	defaultBatchFlushInterval  = 5 * time.Second
-	defaultBatchExportTimeout  = 30 * time.Second
 	defaultServiceName         = "piper-tts-rest-api"
 	defaultServiceVersion      = "unknown"
 	defaultPiperModelPath      = "/app/models/en_US-lessac-medium.onnx"
@@ -134,7 +130,7 @@ type Callback struct {
 }
 
 // Otel holds OpenTelemetry settings. The OTLP endpoint, sampler and
-// sampler argument are also read by the OTel SDK itself.
+// sampler argument are also read by the OTel SDK itself, which also reads the batch tuning.
 type Otel struct {
 	// Enabled turns tracing (and log shipping) on.
 	Enabled bool
@@ -142,18 +138,6 @@ type Otel struct {
 	ExporterEndpoint string
 	// LogShipping is otlp or stdout; only meaningful when Enabled.
 	LogShipping string
-	Traces      Batch
-	Logs        Batch
-}
-
-// Batch tunes a batching OTLP exporter pipeline.
-type Batch struct {
-	// MaxQueueSize is the in-memory queue size; overflow is dropped.
-	MaxQueueSize int
-	// MaxExportBatchSize is the most items sent in one export request.
-	MaxExportBatchSize int
-	FlushInterval      time.Duration
-	ExportTimeout      time.Duration
 }
 
 // Load reads the configuration through lookup (os.LookupEnv).
@@ -221,18 +205,6 @@ func loadOtel(l *loader) Otel {
 		Enabled:          enabled == "true",
 		ExporterEndpoint: l.str("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		LogShipping:      defaultOTLPLogShippingMode,
-		Traces: Batch{
-			MaxQueueSize:       l.positiveInt("OTEL_BATCH_MAX_PENDING_SPANS", defaultBatchQueueSize),
-			MaxExportBatchSize: l.positiveInt("OTEL_BATCH_SPANS_PER_EXPORT", defaultBatchSize),
-			FlushInterval:      l.millis("OTEL_BATCH_FLUSH_INTERVAL_MS", defaultBatchFlushInterval),
-			ExportTimeout:      l.millis("OTEL_BATCH_EXPORT_TIMEOUT_MS", defaultBatchExportTimeout),
-		},
-		Logs: Batch{
-			MaxQueueSize:       l.positiveInt("OTEL_LOGS_BATCH_MAX_PENDING", defaultBatchQueueSize),
-			MaxExportBatchSize: l.positiveInt("OTEL_LOGS_BATCH_PER_EXPORT", defaultBatchSize),
-			FlushInterval:      l.millis("OTEL_LOGS_BATCH_FLUSH_INTERVAL_MS", defaultBatchFlushInterval),
-			ExportTimeout:      l.millis("OTEL_LOGS_BATCH_EXPORT_TIMEOUT_MS", defaultBatchExportTimeout),
-		},
 	}
 	if otel.Enabled {
 		otel.LogShipping = l.oneOf("OTEL_LOG_SHIPPING", defaultOTLPLogShippingMode, logShippingOTLP, logShippingStdout)
